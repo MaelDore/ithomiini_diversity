@@ -8,3 +8,13 @@ outputs/By_OMU/*
 outputs/By_species/*
 controls/*
 packrat/lib*/
+renv/*
+input_data/Bioclim/*
+input_data/HII/wildareas-v3-2009-human-footprint-geotiff/*
+input_data/LUH2/*
+input_data/MERRA_Clim/5m_mean_00s/*
+input_data/SRTM/raw_files/*
+input_data/Species_data/5/*
+maps/*
+models/15/*
+temp/*
