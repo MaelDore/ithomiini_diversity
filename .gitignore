@@ -1,0 +1,10 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+packrat/*
+cluster_folder/*
+outputs/By_OMU/*
+outputs/By_species/*
+controls/*
+packrat/lib*/
