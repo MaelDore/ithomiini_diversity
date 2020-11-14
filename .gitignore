@@ -23,9 +23,7 @@ input_data/MERRA_Clim/5m_mean_00s/*
 input_data/Species_data/5/*
 input_data/Species_data/15/Env_Stacks/*
 input_data/Species_data/15/Occurence_correction_maps/*
-input_data/Species_data/15/PA.Tables/*
 input_data/Species_data/15/Pseudo_absences/*
-input_data/Species_data/15/Spatial_Points_Objects/*
 
 input_data/SRTM/*
 !input_data/SRTM/Elevation_*
