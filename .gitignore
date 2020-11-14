@@ -19,12 +19,20 @@ input_data/Env_data/anomalies/*
 input_data/HII/wildareas-v3-2009-human-footprint-geotiff/*
 input_data/LUH2/*
 input_data/MERRA_Clim/5m_mean_00s/*
-input_data/Species_data/*
+
 input_data/Species_data/5/*
+input_data/Species_data/15/CV_blocks/*
+input_data/Species_data/15/Env_Stacks/*
+input_data/Species_data/15/Occurence_correction_maps/*
+input_data/Species_data/15/PA.Tables/*
+input_data/Species_data/15/Pseudo_absences/*
+input_data/Species_data/15/Spatial_Points_Objects/*
+
 input_data/SRTM/*
 !input_data/SRTM/Elevation_*
 !input_data/SRTM/DEM_SRTM_v4_1m.rds
 !input_data/SRTM/Source.txt
+
 input_data/WWF_official_teow/*
 
 maps/*
