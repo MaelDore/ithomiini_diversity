@@ -10,9 +10,12 @@ controls/*
 packrat/lib*/
 renv/*
 
+# Les enlever les un après les autres du .gitignore jusqu'à ce que ça marche
+# Restart le Rproj à chaque changement pour qu'ils soient pris en compte et le dossier scannés à la recherche de changements
+
 input_data/Bioclim/*
 input_data/Biogeo_masks/*
-input_data/Env_data/*
+input_data/Env_data/anomalies/*
 input_data/HII/wildareas-v3-2009-human-footprint-geotiff/*
 input_data/LUH2/*
 input_data/MERRA_Clim/5m_mean_00s/*
