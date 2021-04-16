@@ -177,6 +177,7 @@ Community_mask[Community_mask > 0] <- 1
 
 sum(Community_mask[], na.rm = T) # 21 415 communities
 plot(Community_mask)
+save(Community_mask, file = "input_data/Map_stuff/Community_mask.RData")
 
 # Mask all rasters to constrain to Ithomiini communities
 DEM_masked <- mask(DEM, world_map_mask)
@@ -221,6 +222,7 @@ GAM_residuals_map[which(!is.na(sp.richness_masked[]))] <- res_GAM
 
 saveRDS(GAM_residuals_map, file = "./outputs/Indices_maps/GAM_residuals_map.rds")
 
+GAM_residuals_map <- readRDS(file = "./outputs/Indices_maps/GAM_residuals_map.rds")
 
 par(mfrow=(c(1,2)))
 plot(GAM_residuals_map)
@@ -236,7 +238,7 @@ plot(x = DEM_TRI_masked, y = GAM_residuals_map, xlab = "TRI", ylab = "Residuals"
 # Central_America_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Central_America_shp.rds")
 # East_Ecuador_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/East_Ecuador_shp.rds")
 # Peruvian_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Peruvian_shp.rds")
-# Mata_Atlantica_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp.rds")
+# Mata_Atlantica_shp5 <- readRDS(file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp5.rds")
 # 
 # # Remove communities above 3000m
 # mask_3000m <- DEM_15m <- readRDS(file = paste0("./input_data/SRTM/Elevation_15.rds"))
@@ -247,7 +249,7 @@ plot(x = DEM_TRI_masked, y = GAM_residuals_map, xlab = "TRI", ylab = "Residuals"
 # # TRI_CA <- unlist(raster::extract(DEM_TRI_masked, Central_America_shp))
 # # TRI_EE <- unlist(raster::extract(DEM_TRI_masked, East_Ecuador_shp))
 # # TRI_EP <- unlist(raster::extract(DEM_TRI_masked, Peruvian_shp))
-# # TRI_MA <- unlist(raster::extract(DEM_TRI_masked, Mata_Atlantica_shp))
+# # TRI_MA <- unlist(raster::extract(DEM_TRI_masked, Mata_Atlantica_shp5))
 # 
 # # Without communities above 3000m
 # DEM_TRI_masked_3000m <- DEM_TRI_masked*mask_3000m
@@ -256,7 +258,7 @@ plot(x = DEM_TRI_masked, y = GAM_residuals_map, xlab = "TRI", ylab = "Residuals"
 # TRI_CA <- unlist(raster::extract(DEM_TRI_masked_3000m, Central_America_shp))
 # TRI_EE <- unlist(raster::extract(DEM_TRI_masked_3000m, East_Ecuador_shp))
 # TRI_EP <- unlist(raster::extract(DEM_TRI_masked_3000m, Peruvian_shp))
-# TRI_MA <- unlist(raster::extract(DEM_TRI_masked_3000m, Mata_Atlantica_shp))
+# TRI_MA <- unlist(raster::extract(DEM_TRI_masked_3000m, Mata_Atlantica_shp5))
 
 
 ### Extract via indices
@@ -355,7 +357,7 @@ wilcox.test(x = TRI_EE, y = TRI_EP, alternative = "greater", paired = F)
 Central_America_shp2 <- readRDS(file = "./input_data/Map_stuff/Bioregions/Central_America_shp2.rds")
 East_Ecuador_shp2 <- readRDS(file = "./input_data/Map_stuff/Bioregions/East_Ecuador_shp2.rds")
 Peruvian_shp2 <- readRDS(file = "./input_data/Map_stuff/Bioregions/Peruvian_shp2.rds")
-Mata_Atlantica_shp2 <- readRDS(file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp2.rds")
+Mata_Atlantica_shp5 <- readRDS(file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp5.rds")
 
 
 
@@ -365,7 +367,7 @@ plot(crop(DEM_TRI_masked_3000m, extent(c(-90, -60, -20, 10))))
 plot(Central_America_shp2, border = gg_color_hue(4)[1], col = NA, lwd = 3, add = T)
 plot(East_Ecuador_shp2, border = gg_color_hue(4)[2], col = NA, lwd = 3, add = T)
 plot(Peruvian_shp2, border = gg_color_hue(4)[3], col = NA, lwd = 3, add = T)
-plot(Mata_Atlantica_shp2, border = gg_color_hue(4)[4], col = NA, lwd = 3, add = T)
+plot(Mata_Atlantica_shp5, border = gg_color_hue(4)[4], col = NA, lwd = 3, add = T)
 
 
 ?extent
@@ -390,12 +392,12 @@ plot(test_map)
 # Central_America_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Central_America_shp.rds")
 # East_Ecuador_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/East_Ecuador_shp.rds")
 # Peruvian_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Peruvian_shp.rds")
-# Mata_Atlantica_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp.rds")
+# Mata_Atlantica_shp5 <- readRDS(file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp5.rds")
 # 
 # GAM_resid_CA <- unlist(raster::extract(GAM_residuals_map, Central_America_shp))
 # GAM_resid_EE <- unlist(raster::extract(GAM_residuals_map, East_Ecuador_shp))
 # GAM_resid_EP <- unlist(raster::extract(GAM_residuals_map, Peruvian_shp))
-# GAM_resid_MA <- unlist(raster::extract(GAM_residuals_map, Mata_Atlantica_shp))
+# GAM_resid_MA <- unlist(raster::extract(GAM_residuals_map, Mata_Atlantica_shp5))
 
 ### Extract via indices
 load(file = "./outputs/Correlation_tests/Bioregions_indices.RData")
@@ -429,6 +431,10 @@ library(ggpubr)
 
 ?geom_signif
 
+# Select the color to keep the same than in other graph with bioregions
+gg_color_hue(4)
+color_list <- c("grey", "#C77CFF", "#F8766D", "#7CAE00", "#00BFC4")
+
 pdf(file = "./graphs/TRI/Boxplot_GAM_resid_Bioregions.pdf", height = 8, width = 10)
 
 original_ext_margins <- par()$oma
@@ -438,8 +444,9 @@ par(oma = c(0,0,0,0), mar = c(4.5,4,3.5,1.3), xpd = T)
 # Set margin parameters: Bottom, left, top, right
 
 
+
 gg_boxplot <- ggplot(data = GAM_resid_df, aes(x = Name_bioregions, y = GAM_resid_bioregions)) +
-  geom_boxplot(fill = c("grey", gg_color_hue(4))) + 
+  geom_boxplot(fill = color_list) + 
   ggtitle("") +
   xlab("") + ylab("GAM Residuals") +
   scale_x_discrete(labels = c("Others", "BAF", "Central America", "East Ecuador", "East Peru")) +

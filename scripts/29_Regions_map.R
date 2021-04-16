@@ -26,7 +26,7 @@ e <- extent(c(xmin,xmax,ymin,ymax))
 DEM_SRTM_v4_1m <- readRDS(file = "./input_data/SRTM/DEM_SRTM_v4_1m.rds")
 DEM_SRTM_v4_1m_cropped <- crop(DEM_SRTM_v4_1m, e)
 
-pdf(file = paste0("./maps/Regions.pdf"), height = 12, width = 15)
+pdf(file = paste0("./maps/Bioregions/Regions.pdf"), height = 12, width = 15)
 
 plot(DEM_SRTM_v4_1m_cropped, col = gray.colors(100, start = 0.9, end = 0, gamma = 2.2, alpha = NULL))
 plot(country_borders, border = "#00000030", add = T)
@@ -108,10 +108,22 @@ BAF <- Neotropics %>%
 BAF_shp <- remove.holes(gSimplify(as(BAF, 'Spatial'), tol = 0.5, topologyPreserve = F))
 
 plot(DEM_SRTM_v4_1m_cropped, col = gray.colors(100, start = 0.9, end = 0, gamma = 2.2, alpha = NULL))
+plot(BAF, col = "darkgreen", add = T)
 plot(BAF_shp, col = "limegreen", add = T)
 
+# Only ecoregions in the tropical forests Biome
 Mata_Atlantica_shp2 <- readRDS(file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp2.rds")
 plot(Mata_Atlantica_shp2, col = "limegreen", add = T)
+
+# From Terrabrasilis
+Mata_Atlantica_shp4 <- readRDS(file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp4.rds")
+plot(Mata_Atlantica_shp4, col = "limegreen", add = T)
+
+# Merge both to add the Northern East portion, but keep the SouthWest one
+Mata_Atlantica_shp5 <- gUnion(Mata_Atlantica_shp2, Mata_Atlantica_shp4)
+plot(Mata_Atlantica_shp5, col = "limegreen", add = T)
+
+saveRDS(Mata_Atlantica_shp5, file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp5.rds", version = "2")
 
 ### Central America ####
 # 60129, 60167, 60119, 60130, 60224, 60209, 60303, 60154, 60181, 60235, 60230, 60211, 60309, ... Use Ithomiini range to get the last upper part
@@ -149,6 +161,8 @@ Northern_Andes <- Neotropics %>%
   filter(ECO_ID %in% c(60175, 60118, 60136, 60221, 60109, 60207, 61006, 60145, 60225, 60121, 60159, 61007)) %>%
   summarize() 
 
+saveRDS(Northern_Andes, file = "./input_data/Map_stuff/Bioregions/Northern_Andes_raw_shp.rds", version = "2")
+
 Northern_Andes_shp <- remove.holes(gSimplify(as(Northern_Andes, 'Spatial'), tol = 0.3, topologyPreserve = F))
 
 plot(DEM_SRTM_v4_1m_cropped, col = gray.colors(100, start = 0.9, end = 0, gamma = 2.2, alpha = NULL))
@@ -164,6 +178,8 @@ Central_Andes <- Neotropics %>%
   filter(ECO_ID %in% c(60153, 60223, 61003, 61002, 61001, 60105, 60206, 60165)) %>%
   summarize() 
 
+saveRDS(Central_Andes, file = "./input_data/Map_stuff/Bioregions/Central_Andes_raw_shp.rds", version = "2")
+
 Central_Andes_shp <- remove.holes(gSimplify(as(Central_Andes, 'Spatial'), tol = 0.5, topologyPreserve = F))
 
 plot(DEM_SRTM_v4_1m_cropped, col = gray.colors(100, start = 0.9, end = 0, gamma = 2.2, alpha = NULL))
@@ -177,6 +193,8 @@ saveRDS(Central_Andes_shp, file = "./input_data/Map_stuff/Bioregions/Central_And
 Western_Lowlands <- Neotropics %>% 
   filter(ECO_ID %in% c(60232, 60214, 60178, 60115, 60137, 60229, 61308)) %>%
   summarize() 
+
+saveRDS(Western_Lowlands, file = "./input_data/Map_stuff/Bioregions/Western_Lowlands_raw_shp.rds", version = "2")
 
 Western_Lowlands_shp <- remove.holes(gSimplify(as(Western_Lowlands, 'Spatial'), tol = 0.2, topologyPreserve = F))
 
@@ -265,6 +283,8 @@ Western_Amazon <- Neotropics %>%
   filter(ECO_ID %in% c(60142, 60174, 60128, 60166, 60107, 60163)) %>%
   summarize() 
 
+saveRDS(Western_Amazon, file = "./input_data/Map_stuff/Bioregions/Western_Amazon_raw_shp.rds", version = "2")
+
 Western_Amazon_shp <- remove.holes(gSimplify(as(Western_Amazon, 'Spatial'), tol = 1.0, topologyPreserve = F))
 
 plot(DEM_SRTM_v4_1m_cropped, col = gray.colors(100, start = 0.9, end = 0, gamma = 2.2, alpha = NULL))
@@ -288,6 +308,38 @@ plot(Lower_Amazon_shp, col = "blue", add = T)
 saveRDS(Lower_Amazon_shp, file = "./input_data/Map_stuff/Bioregions/Lower_Amazon_shp.rds", version = "2")
 
 
+### Pantanal wetlands + Chiquitano dry forests
+# 60907 (Pantanal flooded savannas), 60212 (Chiquitano dry forests)
+
+Pantanal <- Neotropics %>% 
+  filter(ECO_ID %in% c(60907, 60212)) %>%
+  summarize() 
+
+Pantanal_shp <- remove.holes(gSimplify(as(Pantanal, 'Spatial'), tol = 0.5, topologyPreserve = F))
+
+plot(DEM_SRTM_v4_1m_cropped, col = gray.colors(100, start = 0.9, end = 0, gamma = 2.2, alpha = NULL))
+plot(Pantanal_shp, col = "blue", add = T)
+
+saveRDS(Pantanal_shp, file = "./input_data/Map_stuff/Bioregions/Pantanal_shp.rds", version = "2")
+
+
+### Pampas grasslands
+# 60710 (Uruguayan savannas), 60801 (Espinal), 60803 (Humid Pampas)
+# 60908 (Parana flodded savannas) # Can be added to join the two portions of the real pampas
+
+Pampas <- Neotropics %>% 
+  filter(ECO_ID %in% c(60710, 60801, 60803)) %>%
+  summarize() # %>% 
+  # st_cast("POLYGON") %>% # Divide Multipolygon into several polygons
+  # slice(5) # Extract only the 5th one that fall into Ithomiini range
+
+Pampas_shp <- remove.holes(gSimplify(as(Pampas, 'Spatial'), tol = 0.3, topologyPreserve = F))
+
+plot(DEM_SRTM_v4_1m_cropped, col = gray.colors(100, start = 0.9, end = 0, gamma = 2.2, alpha = NULL))
+plot(Pampas_shp, col = "blue", add = T)
+
+saveRDS(Pampas_shp, file = "./input_data/Map_stuff/Bioregions/Pampas_shp.rds", version = "2")
+
 ##### 2/ Plot map with all regions to delimitate on Illustrator ####
 
 # Load all shp files
@@ -295,7 +347,7 @@ saveRDS(Lower_Amazon_shp, file = "./input_data/Map_stuff/Bioregions/Lower_Amazon
 Guyana_Shield_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Guyana_Shield_shp.rds")
 Caatinga_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Caatinga_shp.rds")
 Cerrado_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Cerrado_shp.rds")
-Mata_Atlantica_shp2 <- readRDS(file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp2.rds")
+Mata_Atlantica_shp5 <- readRDS(file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp5.rds")
 full_CA_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/full_CA_shp.rds")
 Northern_Andes_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Northern_Andes_shp.rds")
 Central_Andes_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Central_Andes_shp.rds")
@@ -306,19 +358,21 @@ Llanos_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Llanos_shp.rds")
 Caribbean_Islands_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Caribbean_Islands_shp.rds")
 Western_Amazon_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Western_Amazon_shp.rds")
 Lower_Amazon_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Lower_Amazon_shp.rds")
+Pantanal_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Pantanal_shp.rds")
+Pampas_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Pampas_shp.rds")
 
 load(file = "./input_data/Map_stuff/country_borders.RData") # Load country borders
 
 # Plot map
 
-pdf(file = paste0("./maps/Regions.pdf"), height = 12, width = 15)
+pdf(file = paste0("./maps/Bioregions/Regions.pdf"), height = 12, width = 15)
 
 plot(DEM_SRTM_v4_1m_cropped, col = gray.colors(100, start = 0.9, end = 0, gamma = 2.2, alpha = NULL))
 plot(country_borders, border = "#00000030", add = T)
 plot(Guyana_Shield_shp, col = "bisque", add = T)
 plot(Caatinga_shp, col = "chocolate1", add = T)
 plot(Cerrado_shp, col = "darkgoldenrod1", add = T)
-plot(Mata_Atlantica_shp2, col = "darkgreen", add = T)
+plot(Mata_Atlantica_shp5, col = "darkgreen", add = T)
 plot(full_CA_shp, col = "firebrick1", add = T)
 plot(Northern_Andes_shp, col = "azure2", add = T)
 plot(Central_Andes_shp, col = "darkgrey", add = T)
@@ -329,6 +383,8 @@ plot(Chacos_shp, col = "deeppink", add = T)
 plot(Caribbean_Islands_shp, col = "pink", add = T)
 plot(Western_Amazon_shp, col = "cyan", add = T)
 plot(Lower_Amazon_shp, col = "blue", add = T)
+plot(Pantanal_shp, col = "grey100", add = T)
+plot(Pampas_shp, col = "tan4", add = T)
 
 dev.off()
 

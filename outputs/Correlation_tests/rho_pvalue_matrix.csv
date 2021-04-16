@@ -1,10 +1,11 @@
-"";"Sp. richness";"Sp. diversity";"Sp. rarity";"Faith's PD";"Sum of FP";"MPD";"Mim. richness";"Mim. diversity";"Mim. rarity"
-"Sp. richness";NA;0;0;0;0;0,703;0;0;0
-"Sp. diversity";0,999;NA;0;0;0;0,722;0;0;0
-"Sp. rarity";0,603;0,604;NA;0;0;0,029;0;0;0
-"Faith's PD";0,996;0,994;0,591;NA;0;0,607;0;0;0
-"Sum of FP";0,993;0,991;0,558;0,993;NA;0,498;0;0;0
-"MPD";0,054;0,05;-0,314;0,073;0,099;NA;0,602;0,504;0,559
-"Mim. richness";0,93;0,928;0,541;0,92;0,933;0,078;NA;0;0
-"Mim. diversity";0,885;0,882;0,503;0,876;0,892;0,101;0,98;NA;0
-"Mim. rarity";0,623;0,62;0,695;0,612;0,608;-0,096;0,711;0,686;NA
+"";"Sp. richness";"Sp. diversity";"Faith's PD";"ED";"Mean ring size";"Max ring size";"Mim. richness";"Mim. diversity";"Sp. rarity";"Mim. rarity"
+"Sp. richness";NA;0;0;0;0;0;0;0;0;0
+"Sp. diversity";0,999;NA;0;0;0;0;0;0;0;0
+"Faith's PD";0,996;0,995;NA;0;0;0;0;0;0;0
+"ED";0,993;0,991;0,993;NA;0;0;0;0;0,001;0
+"Mean ring size";0,941;0,943;0,94;0,931;NA;0;0;0;0;0
+"Max ring size";0,948;0,949;0,945;0,934;0,957;NA;0;0;0;0
+"Mim. richness";0,934;0,931;0,924;0,936;0,784;0,811;NA;0;0,001;0
+"Mim. diversity";0,891;0,887;0,882;0,897;0,733;0,734;0,981;NA;0,002;0
+"Sp. rarity";0,473;0,475;0,46;0,42;0,433;0,46;0,417;0,379;NA;0
+"Mim. rarity";0,606;0,604;0,602;0,582;0,459;0,533;0,649;0,615;0,657;NA

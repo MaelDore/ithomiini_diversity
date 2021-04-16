@@ -38,6 +38,7 @@ pal_bl_red_Mannion <- readRDS(file = "./maps/pal_bl_red_Mannion.rds")
 grid_Mollweide_out <- readRDS(file = "./input_data/Map_stuff/grid_Mollweide_out.rds")
 large_bg_mask_Mollweide <- readRDS(file = "./input_data/Map_stuff/large_bg_mask_Mollweide.rds")
 bbox_sp_Mollweide <- readRDS(file = "./input_data/Map_stuff/bbox_sp_Mollweide.rds")
+Andes_grid_Mollweide_out <- readRDS(file = "./input_data/Map_stuff/Andes_grid_Mollweide_out.rds")
 
 # Load stuff for plot on Andes
 Andes_ext <- extent(c(-90, -59, -15, 14))

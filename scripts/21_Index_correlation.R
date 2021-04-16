@@ -28,7 +28,7 @@ all_indices_stack <- stack(sp.richness, sp.diversity, sp.mean.rarity, Faith.PD, 
 all_indices_stack <- mask(x = all_indices_stack, mask = Ithomiini_range_mask) # Remove data outside Ithomiini range
 all_indices_stack <- virtualspecies::synchroniseNA(all_indices_stack) # Synchronize NA between layers
 
-names(all_indices_stack) <- index_list <- c("Sp. richness", "Sp. diversity", "Sp. rarity", "Faith's PD", "Sum of FP", "MPD", "Mim. richness", "Mim. diversity", "Mim. rarity")
+names(all_indices_stack) <- index_list <- c("Sp. richness", "Sp. diversity", "Sp. rarity", "Faith's PD", "ED", "MPD", "Mim. richness", "Mim. diversity", "Mim. rarity")
 
 save(all_indices_stack, file = "./outputs/Correlation_tests/all_indices_stack.RData", version = 2)
 saveRDS(all_indices_stack, file = "./outputs/Correlation_tests/all_indices_stack.rds", version = 2)
@@ -120,7 +120,7 @@ dd_reorder <- reorder(x = dd, wts = rowMeans(x = rho_dist))
 plot(dd_reorder)
 
 # Set color palette
-heatmap_pal <- rev(get_brewer_pal("RdYlBu", n = 100))[10:95]
+heatmap_pal <- rev(tmaptools::get_brewer_pal("RdYlBu", n = 100))[10:95]
 
 
 ### 1.3/ Plot heatmap ####
@@ -826,7 +826,7 @@ load(file =  paste0(internal.wd, "/Maps_exploitation/Models/Cor_FPD_Sp.richness_
 vario_best <- Variogram(m1, form = ~ proj_sample.all_coords[,1] + proj_sample.all_coords[,2], resType = "pearson", maxDist = 4000)
 plot(vario_best, smooth = FALSE, ylim = c(0, 1.2))
 
-# Plot Variogram on normalized residuals that shoud show no trend if things went well
+# Plot Variogram on normalized residuals that should show no trend if things went well
 vario_norm <- Variogram(m1, form = ~ proj_sample.all_coords[,1] + proj_sample.all_coords[,2], resType = "normalized", maxDist = 3000)
 plot(vario_norm, smooth = FALSE, ylim = c(0, 1.2))
 

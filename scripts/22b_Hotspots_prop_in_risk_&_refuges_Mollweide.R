@@ -2386,8 +2386,8 @@ legend(legend = "Refuge areas (25%)", x = "bottomleft", bty = "n",
 legend(legend = "Refuge areas (5%)", x = "bottomleft", bty = "n",
        fill = "navyblue", text.font = 2, cex = 1.2, inset=c(0.02, 0.13))
 
-legend(legend = "a", x = "bottomright", bty = "n",
-       text.font = 2, cex = 1.6, inset = c(0.01, 0))
+legend(legend = "(a)", x = "bottomright", bty = "n",
+       text.font = 2, cex = 1.8, inset = c(0.01, 0))
 
 # B/ Species richness for hotspot 5%
 
@@ -2424,15 +2424,15 @@ legend(legend = "Refuge areas (25%)", x = "bottomleft", bty = "n",
 legend(legend = "Refuge areas (5%)", x = "bottomleft", bty = "n",
        fill = "navyblue", text.font = 2, cex = 1.2, inset=c(0.02, 0.13))
 
-legend(legend = "b", x = "bottomright", bty = "n",
-       text.font = 2, cex = 1.6, inset = c(0.01, 0))
+legend(legend = "(b)", x = "bottomright", bty = "n",
+       text.font = 2, cex = 1.8, inset = c(0.01, 0))
 
 # C/ Species rarity for hotspot 25%
 
 # Plot without axis
 image(sp.rarity_cat_map_rank_hotspot_25_Mollweide, 
       col = c("#EDEDED", "papayawhip", "red4", "red", "dodgerblue", "navyblue"), 
-      main = paste0("Mean species rarity\nTop 25% hotspots"),
+      main = paste0("Species geographic rarity\nTop 25% hotspots"),
       cex.axis = 1.4, cex.main = 1.6, 
       xlim = c(-4600, 4600), ylim = c(-4450, 3400), axes = F,
       xlab = "", ylab = "")
@@ -2462,15 +2462,15 @@ legend(legend = "Refuge areas (25%)", x = "bottomleft", bty = "n",
 legend(legend = "Refuge areas (5%)", x = "bottomleft", bty = "n",
        fill = "navyblue", text.font = 2, cex = 1.2, inset=c(0.02, 0.13))
 
-legend(legend = "c", x = "bottomright", bty = "n",
-       text.font = 2, cex = 1.6, inset = c(0.01, 0))
+legend(legend = "(c)", x = "bottomright", bty = "n",
+       text.font = 2, cex = 1.8, inset = c(0.01, 0))
 
 # D/ Species rarity for hotspot 5%
 
 # Plot without axis
 image(sp.rarity_cat_map_rank_hotspot_5_Mollweide, 
       col = c("#EDEDED", "papayawhip", "red4", "red"), 
-      main = paste0("Mean species rarity\nTop 5% hotspots"),
+      main = paste0("Species geographic rarity\nTop 5% hotspots"),
       cex.axis = 1.4, cex.main = 1.6, 
       xlim = c(-4600, 4600), ylim = c(-4450, 3400), axes = F,
       xlab = "", ylab = "")
@@ -2500,8 +2500,8 @@ legend(legend = "Refuge areas (25%)", x = "bottomleft", bty = "n",
 legend(legend = "Refuge areas (5%)", x = "bottomleft", bty = "n",
        fill = "navyblue", text.font = 2, cex = 1.2, inset=c(0.02, 0.13))
 
-legend(legend = "d", x = "bottomright", bty = "n",
-       text.font = 2, cex = 1.6, inset = c(0.01, 0))
+legend(legend = "(d)", x = "bottomright", bty = "n",
+       text.font = 2, cex = 1.8, inset = c(0.01, 0))
 
 # # E/ MPD for hotspot 25%
 # 
@@ -2614,8 +2614,8 @@ legend(legend = "Refuge areas (25%)", x = "bottomleft", bty = "n",
 legend(legend = "Refuge areas (5%)", x = "bottomleft", bty = "n",
        fill = "navyblue", text.font = 2, cex = 1.2, inset=c(0.02, 0.13))
 
-legend(legend = "e", x = "bottomright", bty = "n",
-       text.font = 2, cex = 1.6, inset = c(0.01, 0))
+legend(legend = "(e)", x = "bottomright", bty = "n",
+       text.font = 2, cex = 1.8, inset = c(0.01, 0))
 
 # F/ Mimicry richness for hotspot 5%
 
@@ -2652,15 +2652,15 @@ legend(legend = "Refuge areas (25%)", x = "bottomleft", bty = "n",
 legend(legend = "Refuge areas (5%)", x = "bottomleft", bty = "n",
        fill = "navyblue", text.font = 2, cex = 1.2, inset=c(0.02, 0.13))
 
-legend(legend = "f", x = "bottomright", bty = "n",
-       text.font = 2, cex = 1.6, inset = c(0.01, 0))
+legend(legend = "(f)", x = "bottomright", bty = "n",
+       text.font = 2, cex = 1.8, inset = c(0.01, 0))
 
 # G/ Mimicry rarity for hotspot 25%
 
 # Plot without axis
 image(ring.rarity_cat_map_rank_hotspot_25_Mollweide, 
       col = c("#EDEDED", "papayawhip", "red4", "red", "dodgerblue", "navyblue"), 
-      main = paste0("Mean mimicry rarity\nTop 25% hotspots"),
+      main = paste0("Mimicry geographic rarity\nTop 25% hotspots"),
       cex.axis = 1.4, cex.main = 1.6, 
       xlim = c(-4600, 4600), ylim = c(-4450, 3400), axes = F,
       xlab = "", ylab = "")
@@ -2690,15 +2690,15 @@ legend(legend = "Refuge areas (25%)", x = "bottomleft", bty = "n",
 legend(legend = "Refuge areas (5%)", x = "bottomleft", bty = "n",
        fill = "navyblue", text.font = 2, cex = 1.2, inset=c(0.02, 0.13))
 
-legend(legend = "g", x = "bottomright", bty = "n",
-       text.font = 2, cex = 1.6, inset = c(0.01, 0))
+legend(legend = "(g)", x = "bottomright", bty = "n",
+       text.font = 2, cex = 1.8, inset = c(0.01, 0))
 
 # H/ Mimicry rarity for hotspot 5%
 
 # Plot without axis
 image(ring.rarity_cat_map_rank_hotspot_5_Mollweide, 
       col = c("#EDEDED", "papayawhip", "red4", "red", "dodgerblue"), 
-      main = paste0("Mean mimicry rarity\nTop 5% hotspots"),
+      main = paste0("Mimicry geographic rarity\nTop 5% hotspots"),
       cex.axis = 1.4, cex.main = 1.6, 
       xlim = c(-4600, 4600), ylim = c(-4450, 3400), axes = F,
       xlab = "", ylab = "")
@@ -2728,8 +2728,8 @@ legend(legend = "Refuge areas (25%)", x = "bottomleft", bty = "n",
 legend(legend = "Refuge areas (5%)", x = "bottomleft", bty = "n",
        fill = "navyblue", text.font = 2, cex = 1.2, inset=c(0.02, 0.13))
 
-legend(legend = "h", x = "bottomright", bty = "n",
-       text.font = 2, cex = 1.6, inset = c(0.01, 0))
+legend(legend = "(h)", x = "bottomright", bty = "n",
+       text.font = 2, cex = 1.8, inset = c(0.01, 0))
 
 
 par(mar = internal_margins)
@@ -2973,7 +2973,7 @@ g1 <- ggplot(all_indices_N.quantiles_df, aes(x = quantiles, y = N.quantiles, fil
   annotate("text", x = 4.90, y = 180, size = 6, fontface = "bold", label = "1.6%") +
    
   annotate("text", x = 3, y = 3875, size = 11, fontface = "bold", label = "Top 25% hotspots") +
-  annotate("text", x = 0.6, y = 3875, size = 10, fontface = "bold", label = "a") +
+  annotate("text", x = 0.7, y = 3875, size = 11, fontface = "bold", label = "(a)") +
   
   coord_cartesian(clip = "off") # To allow to draw label outside of the plot area
 
@@ -3208,7 +3208,7 @@ g2 <- ggplot(all_indices_N.quantiles_df_5, aes(x = quantiles, y = N.quantiles, f
   annotate("text", x = 4.380, y = 94, size = 6, fontface = "bold", label = "6.7%") +
    
   annotate("text", x = 3, y = 585, size = 11, fontface = "bold", label = "Top 5% hotspots") +
-  annotate("text", x = 0.6, y = 580, size = 10, fontface = "bold", label = "b") +
+  annotate("text", x = 0.7, y = 580, size = 11, fontface = "bold", label = "(b)") +
   
   coord_cartesian(clip = "off") # To allow to draw label outside of the plot area
 
@@ -3217,6 +3217,7 @@ print(g2)
 par(mar = internal_margins, oma = external_margins)
 
 dev.off()
+
 
 ### 13/ Bar plots for proportions of overlap with hotspots 25% and 5% aside ####
 

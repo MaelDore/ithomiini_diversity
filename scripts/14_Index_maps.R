@@ -2060,7 +2060,7 @@ sp.rarity_indices_Jaccard.80 <- 1-(sp.range_size_Jaccard.80/max(sp.range_size_Ja
 # Apply weights
 sp.weighted.stack_Jaccard.80 <- All_sp_proba_stack_Jaccard.80 # Generate the stack to fill
 for (i in 1:nlayers(sp.weighted.stack_Jaccard.80)){
-  # Multiply species probability of presence by ring rarity indices
+  # Multiply species probability of presence by species rarity indices
   sp.weighted.stack_Jaccard.80@layers[[i]]@data@values <- All_sp_proba_stack_Jaccard.80@layers[[i]]@data@values * sp.rarity_indices_Jaccard.80[i]
 }
 
@@ -2079,6 +2079,9 @@ save(sp.range_size_Jaccard.80, file = "./outputs/Indices_maps/sp.range_size_Jacc
 saveRDS(sp.range_size_Jaccard.80, file = "./outputs/Indices_maps/sp.range_size_Jaccard.80.rds", version = "2")
 save(sp.rarity_indices_Jaccard.80, file = "./outputs/Indices_maps/sp.rarity_indices_Jaccard.80.RData", version = "2")
 saveRDS(sp.rarity_indices_Jaccard.80, file = "./outputs/Indices_maps/sp.rarity_indices_Jaccard.80.rds", version = "2")
+
+# sp.rarity_indices_Jaccard.80 <- readRDS(file = "./outputs/Indices_maps/sp.rarity_indices_Jaccard.80.rds")
+# hist(sp.rarity_indices_Jaccard.80)
 
 # Save full and mean rarity maps
 save(sp.rarity_Jaccard.80, file = "./outputs/Indices_maps/sp.rarity_Jaccard.80.RData", version = "2")
@@ -2100,6 +2103,138 @@ indice_threshold_Jaccard.80 <- round(quantile(sp.rarity_indices_Jaccard.80, p=0.
 abline(v = indice_threshold_Jaccard.80, col = "red", lty = 2, lwd = 2)
 legend(legend = paste0("Threshold 75% for rarity\n",indice_threshold_Jaccard.80), col = "red", lty = 2, lwd = 2, x = "topleft", cex = 1, bty ="n")
 dev.off()
+
+
+## Test other weighting scheme
+
+# sp.range_size_Jaccard.80 <- readRDS(file = "./outputs/Indices_maps/sp.range_size_Jaccard.80.rds")
+# hist(sp.range_size_Jaccard.80)
+# 
+# inv_weights <- max(sp.range_size_Jaccard.80)/sp.range_size_Jaccard.80
+# inv_weights <- (weights-min(weights))/(max(weights)-min(weights)) # Normalized
+# 
+# hist(inv_weights)
+# 
+# plot(inv_weights ~ sp.range_size_Jaccard.80)
+
+# Load stuff to compute new rarity index
+sp.richness_Jaccard.80 <- readRDS(file = paste0("./outputs/Indices_maps/tot.sp.richness_Jaccard.80.rds"))
+All_sp_proba_stack_Jaccard.80 <- readRDS(file = paste0("./outputs/Indices_stacks/All_sp_proba_stack_Jaccard.80.rds"))
+load(file = "./outputs/Indices_maps/sp.range_size_Jaccard.80.RData", version = "2")
+
+
+library(Rarity)
+?rWeights
+
+# # Rarity weights based on inverse normalized range
+# inv_weights <- rWeights(occData = sp.range_size_Jaccard.80, wMethods = "invQ", normalised = T, rounding = 5)$invQ
+# hist(inv_weights)
+# plot(norm_weights ~ sp.range_size_Jaccard.80)
+
+sp_proba_brick_Jaccard.80 <- readAll(brick(All_sp_proba_stack_Jaccard.80))
+sp_assemblage <- t(tidyr::drop_na(as.data.frame(sp_proba_brick_Jaccard.80@data@values)))
+sp_assemblage <- sp_assemblage[, colSums(sp_assemblage) >= 1]
+
+# # Rarity weights based on an inverse exponential function with inflexion point calibrated as the rarity threshold as such that 25% of species are rare
+# Gaston_weights <- rWeights(occData = sp.range_size_Jaccard.80, wMethods = "W", rCutoff = "Gaston",
+#                           normalised = T, rounding = 5, assemblages = sp_assemblage)$W
+# hist(Gaston_weights)
+# plot(Gaston_weights ~ sp.range_size_Jaccard.80)
+
+# Rarity weights based on an inverse exponential function with inflexion point calibrated as the rarity threshold as such that communities host 25% of rare species in average
+Leroy_weights_df <- rWeights(occData = sp.range_size_Jaccard.80, wMethods = "W", rCutoff = "Leroy",
+                             normalised = T, rounding = 5, assemblages = sp_assemblage)
+Leroy_weights <- Leroy_weights_df$W
+
+hist(Leroy_weights)
+plot(Leroy_weights ~ sp.range_size_Jaccard.80)
+
+# tested_weights <- inv_weights
+# tested_weights <- Gaston_weights
+tested_weights <- Leroy_weights
+
+# Apply weights
+tested_sp.weighted.stack_Jaccard.80 <- All_sp_proba_stack_Jaccard.80 # Generate the stack to fill
+for (i in 1:nlayers(tested_sp.weighted.stack_Jaccard.80)){
+  # Multiply species probability of presence by species rarity indices
+  tested_sp.weighted.stack_Jaccard.80@layers[[i]]@data@values <- All_sp_proba_stack_Jaccard.80@layers[[i]]@data@values * tested_weights[i]
+}
+
+# Sum = Richness weighted by rarity based on Range-size
+tested_sp.rarity_Jaccard.80 <- readAll(calc(tested_sp.weighted.stack_Jaccard.80, fun = sum)) 
+# Divided by local richness = Mean rarity indices in the community (weighted by the probability of presence of each species)
+tested_sp.mean.rarity_Jaccard.80 <- tested_sp.rarity_Jaccard.80/sp.richness_Jaccard.80
+
+tested_sp.mean.rarity_Jaccard.80 <- tested_sp.mean.rarity_Jaccard.80 + 0.002
+tested_sp.mean.rarity_Jaccard.80_contrasted <- contrasting_raster(x = tested_sp.mean.rarity_Jaccard.80, zmin = 0, zmax = 0.5)
+
+plot(tested_sp.mean.rarity_Jaccard.80, col = pal_bl_red_Mannion)
+plot(tested_sp.mean.rarity_Jaccard.80_contrasted, col = pal_bl_red_Mannion)
+plot(sp.mean.rarity_Jaccard.80, col = pal_bl_red_Mannion)
+
+pdf(file = paste0("./maps/Indices_maps/Jaccard.80/Comparison_sp_rarity_weights.pdf"), height = 5.3, width = 5.3)
+plot(tested_sp.mean.rarity_Jaccard.80[] ~ sp.mean.rarity_Jaccard.80[], ylab = "Leroy's weighted rarity", xlab = "Linearly weighted rarity", main = "Comparison of weighting schemes for rarity")
+dev.off()
+cor.test(x = tested_sp.mean.rarity_Jaccard.80[], y = sp.mean.rarity_Jaccard.80[], method = "spearman", alternative = "two.sided", na.rm = T)
+
+plot(tested_sp.mean.rarity_Jaccard.80[] ~ sp.richness_Jaccard.80[])
+cor.test(x = tested_sp.mean.rarity_Jaccard.80[], y = sp.richness_Jaccard.80[], method = "spearman", alternative = "two.sided", na.rm = T)
+
+threshold_75 <- quantile(x = tested_sp.mean.rarity_Jaccard.80[], p = 0.75, na.rm = T)
+threshold_95 <- quantile(x = tested_sp.mean.rarity_Jaccard.80[], p = 0.95, na.rm = T)
+
+plot(tested_sp.mean.rarity_Jaccard.80 > threshold_75)
+plot(tested_sp.mean.rarity_Jaccard.80 > threshold_95)
+
+# Plot all stuff to compare the two weighting scheme
+pdf(file = paste0("./maps/Indices_maps/Jaccard.80/Comparison_sp_rarity_indices_all.pdf"), height = 7.5, width = 25)
+par(mfrow = c(2,7))
+
+plot(tested_weights ~ sp.range_size_Jaccard.80, xlab = "Sp. range", ylab = "Sp. rarity", main = "Leroy's weighting scheme")
+hist(tested_weights, xlab = "Sp. rarity weights", main = "Histo of weights")
+hist(tested_sp.mean.rarity_Jaccard.80, xlab = 'Community mean geographic rarity', main = "Histo of community scores")
+plot(tested_sp.mean.rarity_Jaccard.80_contrasted, col = pal_bl_red_Mannion, main = "Sp. geographic rarity")
+plot(tested_sp.mean.rarity_Jaccard.80 > quantile(x = tested_sp.mean.rarity_Jaccard.80[], p = 0.75, na.rm = T), main = "Top 25%")
+plot(tested_sp.mean.rarity_Jaccard.80 > quantile(x = tested_sp.mean.rarity_Jaccard.80[], p = 0.95, na.rm = T), main = "Top 5%")
+plot(tested_sp.mean.rarity_Jaccard.80[] ~ sp.richness_Jaccard.80[], xlab = "Sp. richness", ylab = "Sp. geographic rarity", main = "Correlation with sp. richness")
+
+plot(sp.rarity_indices_Jaccard.80 ~ sp.range_size_Jaccard.80, xlab = "Sp. range", ylab = "Sp. rarity", main = "Linear weighting scheme")
+hist(sp.rarity_indices_Jaccard.80, xlab = "Sp. rarity weights", main = "Histo of weights")
+hist(sp.mean.rarity_Jaccard.80, xlab = 'Community mean geographic rarity', main = "Histo of community scores")
+plot(sp.mean.rarity_Jaccard.80, col = pal_bl_red_Mannion, main = "Sp. geographic rarity")
+plot(sp.mean.rarity_Jaccard.80 > quantile(x = sp.mean.rarity_Jaccard.80[], p = 0.75, na.rm = T), main = "Top 25%")
+plot(sp.mean.rarity_Jaccard.80 > quantile(x = sp.mean.rarity_Jaccard.80[], p = 0.95, na.rm = T), main = "Top 5%")
+plot(sp.mean.rarity_Jaccard.80[] ~ sp.richness_Jaccard.80[], xlab = "Sp. richness", ylab = "Sp. geographic rarity", main = "Correlation with sp. richness")
+
+par(mfrow = c(1,1))
+dev.off()
+
+# Plot the distribution of weights (species rarity indices) for Leroy's weighting
+pdf(file = paste0("./maps/Indices_maps/Jaccard.80/sp_rarity_indices_distri_Jaccard.80_Leroy_weights.pdf"), height = 5.3, width = 6.5)
+hist(Leroy_weights, main = "Distribution of species rarity indices\nLeroy's weights", breaks = 20, xlab = "Rarity indices")
+indice_threshold <- round(quantile(Leroy_weights, p = 0.75), 3) # Threshold value for Gaston's qualitative rarity
+abline(v = 1-Leroy_weights_df$cut.off[1], col = "red", lty = 2, lwd = 2)
+abline(v = indice_threshold, col = "red", lty = 3, lwd = 2)
+legend(legend = c("Threshold for rarity", paste0("Leroy's scheme: ", round(1-Leroy_weights_df$cut.off[1], 3)), paste0("Gaston's 25%: ", indice_threshold)), col = "red", lty = c(NA, 2, 3), lwd = 2, x = "top", cex = 1, bty ="n")
+dev.off()
+
+# Save the stuff for the new rarity index based on Leroy (2013)'s weighting
+sp.rarity_indices_Leroy_Jaccard.80 <- Leroy_weights
+sp.rarity_Leroy_Jaccard.80 <- tested_sp.rarity_Jaccard.80
+sp.mean.rarity_Leroy_Jaccard.80 <- tested_sp.mean.rarity_Jaccard.80
+sp.mean.rarity_Leroy_Jaccard.80_contrasted <- tested_sp.mean.rarity_Jaccard.80_contrasted
+
+# Save species ranges and species continous rarity indices
+save(sp.rarity_indices_Leroy_Jaccard.80, file = "./outputs/Indices_maps/sp.rarity_indices_Leroy_Jaccard.80.RData", version = "2")
+saveRDS(sp.rarity_indices_Leroy_Jaccard.80, file = "./outputs/Indices_maps/sp.rarity_indices_Leroy_Jaccard.80.rds", version = "2")
+
+# Save full and mean rarity maps
+save(sp.rarity_Leroy_Jaccard.80, file = "./outputs/Indices_maps/sp.rarity_Leroy_Jaccard.80.RData", version = "2")
+saveRDS(sp.rarity_Leroy_Jaccard.80, file = "./outputs/Indices_maps/sp.rarity_Leroy_Jaccard.80.rds", version = "2")
+save(sp.mean.rarity_Leroy_Jaccard.80, file = "./outputs/Indices_maps/sp.mean.rarity_Leroy_Jaccard.80.RData", version = "2")
+saveRDS(sp.mean.rarity_Leroy_Jaccard.80, file = "./outputs/Indices_maps/sp.mean.rarity_Leroy_Jaccard.80.rds", version = "2")
+save(sp.mean.rarity_Leroy_Jaccard.80_contrasted, file = "./outputs/Indices_maps/sp.mean.rarity_Leroy_Jaccard.80_contrasted.RData", version = "2")
+saveRDS(sp.mean.rarity_Leroy_Jaccard.80_contrasted, file = "./outputs/Indices_maps/sp.mean.rarity_Leroy_Jaccard.80_contrasted.rds", version = "2")
 
 
 ## For Jaccard.95
@@ -3028,6 +3163,130 @@ legend(legend = paste0("Threshold 75% for rarity\n",indice_threshold_Jaccard.80)
 dev.off()
 
 
+# Test other weighting scheme
+
+# Load stuff to compute new rarity index
+ring.richness_Jaccard.80 <- readRDS(file = paste0("./outputs/Indices_maps/ring.richness_Jaccard.80.rds"))
+All_ring_proba_stack_Jaccard.80 <- readRDS(file = paste0("./outputs/Indices_stacks/All_ring_proba_stack_Jaccard.80.RData"))
+load(file = "./outputs/Indices_maps/ring.range_size_Jaccard.80.RData")
+
+
+
+library(Rarity)
+?rWeights
+
+# # Rarity weights based on inverse normalized range
+# inv_weights <- rWeights(occData = ring.range_size_Jaccard.80, wMethods = "invQ", normalised = T, rounding = 5)$invQ
+# hist(inv_weights)
+# plot(inv_weights ~ ring.range_size_Jaccard.80)
+# 
+# plot(All_ring_proba_stack_Jaccard.80)
+
+ring_proba_brick_Jaccard.80 <- brick(All_ring_proba_stack_Jaccard.80)
+ring_assemblage <- t(tidyr::drop_na(as.data.frame(ring_proba_brick_Jaccard.80@data@values)))
+ring_assemblage <- ring_assemblage[, colSums(ring_assemblage) >= 1]
+
+# # Rarity weights based on an inverse exponential function with inflexion point calibrated as the rarity threshold as such that 25% of rings are rare
+# Gaston_weights <- rWeights(occData = ring.range_size_Jaccard.80, wMethods = "W", rCutoff = "Gaston",
+#                           normalised = T, rounding = 5, assemblages = ring_assemblage)$W
+# hist(Gaston_weights)
+# plot(Gaston_weights ~ ring.range_size_Jaccard.80)
+
+# Rarity weights based on an inverse exponential function with inflexion point calibrated as the rarity threshold as such that communities host 25% of rare rings in average
+Leroy_weights_df <- rWeights(occData = ring.range_size_Jaccard.80, wMethods = "W", rCutoff = "Leroy",
+                             normalised = T, rounding = 5, assemblages = ring_assemblage)
+Leroy_weights <- Leroy_weights_df$W
+
+hist(Leroy_weights)
+plot(Leroy_weights ~ ring.range_size_Jaccard.80)
+
+# tested_weights <- inv_weights
+# tested_weights <- Gaston_weights
+tested_weights <- Leroy_weights
+
+# Apply weights
+tested_ring.weighted.stack_Jaccard.80 <- All_ring_proba_stack_Jaccard.80 # Generate the stack to fill
+for (i in 1:nlayers(ring.weighted.stack_Jaccard.80)){
+  # Multiply ring probability of presence by ring rarity indices
+  tested_ring.weighted.stack_Jaccard.80@layers[[i]]@data@values <- All_ring_proba_stack_Jaccard.80@layers[[i]]@data@values * tested_weights[i]
+}
+
+# Sum = Richness weighted by rarity based on Range-size
+tested_ring.rarity_Jaccard.80 <- calc(tested_ring.weighted.stack_Jaccard.80, fun = sum)
+# Divided by local richness = Mean ring rarity indices in the community (weighted by the probability of presence of each rings)
+tested_ring.mean.rarity_Jaccard.80 <- tested_ring.rarity_Jaccard.80/ring.richness_Jaccard.80
+
+tested_ring.mean.rarity_Jaccard.80_contrasted <- contrasting_raster(x = tested_ring.mean.rarity_Jaccard.80, zmin = 0, zmax = 0.75)
+
+plot(tested_ring.mean.rarity_Jaccard.80, col = pal_bl_red_Mannion)
+plot(tested_ring.mean.rarity_Jaccard.80_contrasted, col = pal_bl_red_Mannion)
+plot(mimicry.mean.rarity_Jaccard.80, col = pal_bl_red_Mannion)
+
+pdf(file = paste0("./maps/Indices_maps/Jaccard.80/Comparison_ring_rarity_weights.pdf"), height = 5.3, width = 5.3)
+plot(tested_ring.mean.rarity_Jaccard.80[] ~ mimicry.mean.rarity_Jaccard.80[], ylab = "Leroy's weighted rarity", xlab = "Linearly weighted rarity", main = "Comparison of weighting schemes for rarity")
+dev.off()
+cor.test(x = tested_ring.mean.rarity_Jaccard.80[], y = mimicry.mean.rarity_Jaccard.80[], method = "spearman", alternative = "two.sided", na.rm = T)
+
+plot(tested_ring.mean.rarity_Jaccard.80[] ~ ring.richness_Jaccard.80[])
+cor.test(x = tested_ring.mean.rarity_Jaccard.80[], y = ring.richness_Jaccard.80[], method = "spearman", alternative = "two.sided", na.rm = T)
+
+threshold_75 <- quantile(x = tested_ring.mean.rarity_Jaccard.80[], p = 0.75, na.rm = T)
+threshold_95 <- quantile(x = tested_ring.mean.rarity_Jaccard.80[], p = 0.95, na.rm = T)
+
+plot(tested_ring.mean.rarity_Jaccard.80 > threshold_75)
+plot(tested_ring.mean.rarity_Jaccard.80 > threshold_95)
+
+# Plot all stuff to compare the two weighting scheme
+pdf(file = paste0("./maps/Indices_maps/Jaccard.80/Comparison_ring_rarity_indices_all.pdf"), height = 7.5, width = 25)
+par(mfrow = c(2,7))
+
+plot(tested_weights ~ ring.range_size_Jaccard.80, xlab = "Ring range", ylab = "Ring rarity", main = "Leroy's weighting scheme")
+hist(tested_weights, xlab = "Ring rarity weights", main = "Histo of weights")
+hist(tested_ring.mean.rarity_Jaccard.80, xlab = 'Community mean geographic rarity', main = "Histo of community scores")
+plot(tested_ring.mean.rarity_Jaccard.80_contrasted, col = pal_bl_red_Mannion, main = "Ring geographic rarity")
+plot(tested_ring.mean.rarity_Jaccard.80 > quantile(x = tested_ring.mean.rarity_Jaccard.80[], p = 0.75, na.rm = T), main = "Top 25%")
+plot(tested_ring.mean.rarity_Jaccard.80 > quantile(x = tested_ring.mean.rarity_Jaccard.80[], p = 0.95, na.rm = T), main = "Top 5%")
+plot(tested_ring.mean.rarity_Jaccard.80[] ~ sp.richness_Jaccard.80[], xlab = "Sp. richness", ylab = "Ring geographic rarity", main = "Correlation with Sp. richness")
+
+plot(ring.rarity_Jaccard.80 ~ ring.range_size_Jaccard.80, xlab = "Ring range", ylab = "Ring rarity", main = "Linear weighting scheme")
+hist(ring.rarity_Jaccard.80, xlab = "Ring rarity weights", main = "Histo of weights")
+hist(mimicry.mean.rarity_Jaccard.80, xlab = 'Community mean geographic rarity', main = "Histo of community scores")
+plot(mimicry.mean.rarity_Jaccard.80, col = pal_bl_red_Mannion, main = "Ring geographic rarity")
+plot(mimicry.mean.rarity_Jaccard.80 > quantile(x = mimicry.mean.rarity_Jaccard.80[], p = 0.75, na.rm = T), main = "Top 25%")
+plot(mimicry.mean.rarity_Jaccard.80 > quantile(x = mimicry.mean.rarity_Jaccard.80[], p = 0.95, na.rm = T), main = "Top 5%")
+plot(mimicry.mean.rarity_Jaccard.80[] ~ sp.richness_Jaccard.80[], xlab = "Sp. richness", ylab = "Ring geographic rarity", main = "Correlation with sp. richness")
+
+par(mfrow = c(1,1))
+dev.off()
+
+# Plot the distribution of weights (ring rarity indices) for Leroy's weighting
+pdf(file = paste0("./maps/Indices_maps/Jaccard.80/ring_rarity_indices_distri_Jaccard.80_Leroy_weights.pdf"), height = 5.3, width = 6.5)
+hist(Leroy_weights, main = "Distribution of ring rarity indices\nLeroy's weights", breaks = 20, xlab = "Rarity indices")
+indice_threshold <- round(quantile(Leroy_weights, p = 0.75), 3) # Threshold value for Gaston's qualitative rarity
+abline(v = 1-Leroy_weights_df$cut.off[1], col = "red", lty = 2, lwd = 2)
+abline(v = indice_threshold, col = "red", lty = 3, lwd = 2)
+legend(legend = c("Threshold for rarity", paste0("Leroy's scheme: ", round(1-Leroy_weights_df$cut.off[1], 3)), paste0("Gaston's 25%: ", indice_threshold)), col = "red", lty = c(NA, 2, 3), lwd = 2, x = "top", cex = 1, bty ="n")
+dev.off()
+
+# Save the stuff for the new rarity index based on Leroy (2013)'s weighting
+ring.rarity_indices_Leroy_Jaccard.80 <- Leroy_weights
+ring.rarity_Leroy_Jaccard.80 <- tested_ring.rarity_Jaccard.80
+ring.mean.rarity_Leroy_Jaccard.80 <- tested_ring.mean.rarity_Jaccard.80
+ring.mean.rarity_Leroy_Jaccard.80_contrasted <- tested_ring.mean.rarity_Jaccard.80_contrasted
+
+# Save ring ranges and ring continuous rarity indices
+save(ring.rarity_indices_Leroy_Jaccard.80, file = "./outputs/Indices_maps/ring.rarity_indices_Leroy_Jaccard.80.RData", version = "2")
+saveRDS(ring.rarity_indices_Leroy_Jaccard.80, file = "./outputs/Indices_maps/ring.rarity_indices_Leroy_Jaccard.80.rds", version = "2")
+
+# Save full and mean rarity maps
+save(ring.rarity_Leroy_Jaccard.80, file = "./outputs/Indices_maps/ring.rarity_Leroy_Jaccard.80.RData", version = "2")
+saveRDS(ring.rarity_Leroy_Jaccard.80, file = "./outputs/Indices_maps/ring.rarity_Leroy_Jaccard.80.rds", version = "2")
+save(ring.mean.rarity_Leroy_Jaccard.80, file = "./outputs/Indices_maps/ring.mean.rarity_Leroy_Jaccard.80.RData", version = "2")
+saveRDS(ring.mean.rarity_Leroy_Jaccard.80, file = "./outputs/Indices_maps/ring.mean.rarity_Leroy_Jaccard.80.rds", version = "2")
+save(ring.mean.rarity_Leroy_Jaccard.80_contrasted, file = "./outputs/Indices_maps/ring.mean.rarity_Leroy_Jaccard.80_contrasted.RData", version = "2")
+saveRDS(ring.mean.rarity_Leroy_Jaccard.80_contrasted, file = "./outputs/Indices_maps/ring.mean.rarity_Leroy_Jaccard.80_contrasted.rds", version = "2")
+
+
 ## For Jaccard.95
 
 # Compute weights based on geographic ranges
@@ -3474,8 +3733,8 @@ rm(list = ls()[grep(x = ls(), pattern = "(Jaccard)|(TSS)")])
 ###### 12/ Community vulnerability ######
 
 # Function to compute community vulnerability as the sum of rings vulnerability approximated as the inverse of the local richness of each mimicry ring
-# A ring with only one species as a vulneraibility of 1/1 = 1. A ring of 4 species as a vulnerability of 1/4 = 0.25.
-# Final vulnerability is standardized by total ring richness such as a community mean vulenrability
+# A ring with only one species as a vulnerability of 1/1 = 1. A ring of 4 species as a vulnerability of 1/4 = 0.25.
+# Final vulnerability is standardized by total ring richness such as a community mean vulnerability
 
 vulnerability = function(x, na.rm) {
   x <- round(x, digits = 0) # Need to round ring richness to avoid inflation of value due to numerous rings with richness values close to 0 but not null

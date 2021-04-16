@@ -26,11 +26,11 @@ Mata_Atlantica_shp2 <- readRDS(file = "./input_data/Map_stuff/Bioregions/Mata_At
 # Load mimicry ring richness stack
 All_ring_rich_stack_Jaccard.80 <- readRDS(file = paste0("./outputs/Indices_stacks/All_ring_rich_stack_Jaccard.80.RData"))
 
-# Lod Mean mimicry ring size map for later plot
+# Load Mean mimicry ring size map for later plot
 load(file = "./outputs/Correlation_tests/mean.ring.size.RData")
 
 
-#### 2/  Compute index as max richness among all mimicry rings for each pixel #####
+#### 2/ Compute index as max richness among all mimicry rings for each pixel #####
 
 ring.max.size_Jaccard.80 <- calc(All_ring_rich_stack_Jaccard.80, fun = max)*1
 

@@ -69,6 +69,7 @@ library(sf)
 library(rgeos)
 library(alphahull)
 library(spatialEco)
+library(raster)
 
 # Functions to convert alpha-hull into spatial objects
 source("./functions/Alpha_functions.R", local = TRUE) 
@@ -138,11 +139,16 @@ Forests <- Neotropics_biomes[1,] %>%
   mutate(area = st_area(.)) %>% 
   arrange(desc(area))
 
-plot(Forests)
+plot(Forests$geometry, col = c(1:30, "grey"))
 plot(Forests[1,])
 plot(Forests[2,])
+plot(Forests[5,]) # Pernambuco section
+plot(Forests[8,]) # Brazilia extent
+
+plot(1:20, 1:20, col = c(1:20, "grey"))
 
 Mata_Atlantica <- Forests[2,]
+# Mata_Atlantica <- Forests[c(2,5,8),]
 Mata_Atlantica_shp <- as(Mata_Atlantica, 'Spatial')
 Mata_Atlantica_shp2 <- gSimplify(Mata_Atlantica_shp, tol = 0.3, topologyPreserve = F)
 
@@ -157,6 +163,20 @@ plot(Mata_Atlantica_shp2)
 
 crs(Mata_Atlantica_shp) <- crs(Mata_Atlantica_shp2) <- crs(Central_America_shp2)
 
+# Option with the Terrabrasilis biome
+
+Mata_Atlantica_sf <- st_read("./input_data/Map_stuff/Terrabrasilis_biome_limits/mata_atlantica_border/mata_atlantica_border.shp")
+
+
+plot(Mata_Atlantica_sf)
+Mata_Atlantica_shp3 <- as(Mata_Atlantica_sf, 'Spatial')
+Mata_Atlantica_shp4 <- gSimplify(Mata_Atlantica_shp3, tol = 0.36, topologyPreserve = F)
+plot(Mata_Atlantica_shp4)
+
+# Merge both to add the Northern East portion, but keep the SouthWest one
+Mata_Atlantica_shp5 <- gUnion(Mata_Atlantica_shp2, Mata_Atlantica_shp4)
+plot(Mata_Atlantica_shp5, col = "limegreen", add = T)
+
 ### Save bioregions simplified shp ###
 saveRDS(Central_America_shp, file = "./input_data/Map_stuff/Bioregions/Central_America_shp.rds", version = "2")
 saveRDS(Central_America_shp2, file = "./input_data/Map_stuff/Bioregions/Central_America_shp2.rds", version = "2")
@@ -168,6 +188,9 @@ saveRDS(Peruvian_shp2, file = "./input_data/Map_stuff/Bioregions/Peruvian_shp2.r
 saveRDS(Bolivian_shp, file = "./input_data/Map_stuff/Bioregions/Bolivian_shp.rds", version = "2")
 saveRDS(Mata_Atlantica_shp, file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp.rds", version = "2")
 saveRDS(Mata_Atlantica_shp2, file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp2.rds", version = "2")
+saveRDS(Mata_Atlantica_shp3, file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp3.rds", version = "2")
+saveRDS(Mata_Atlantica_shp4, file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp4.rds", version = "2")
+saveRDS(Mata_Atlantica_shp5, file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp5.rds", version = "2")
 
 ### Load bioregions simplified shp ###
 Central_America_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Central_America_shp.rds")
@@ -179,7 +202,7 @@ Peruvian_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Peruvian_shp.r
 Peruvian_shp2 <- readRDS(file = "./input_data/Map_stuff/Bioregions/Peruvian_shp2.rds")
 Bolivian_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Bolivian_shp.rds")
 Mata_Atlantica_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp.rds")
-Mata_Atlantica_shp2 <- readRDS(file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp2.rds")
+Mata_Atlantica_shp5 <- readRDS(file = "./input_data/Map_stuff/Bioregions/Mata_Atlantica_shp5.rds")
 
 ### Plot the regions ###
 pdf(file = paste0("./maps/Indices_maps/mean.ring.size.pdf"), height = 5.3, width = 6.5)
@@ -197,11 +220,11 @@ plot(East_Ecuador_shp2, col = NA, border = "darkgreen", lwd = 1.5, add = T)
 # plot(West_Ecuador_shp, col = NA, border = "cyan", add = T)
 plot(Peruvian_shp2, col = NA, border = "blue", lwd = 1.5, add = T)
 # plot(Bolivian_shp, col = NA, border = "darkgreen", add = T)
-plot(Mata_Atlantica_shp2, col = NA, border = "purple", lwd = 1.5, add = T)
+plot(Mata_Atlantica_shp5, col = NA, border = "purple", lwd = 1.5, add = T)
 
 scalebar(d = 2000, type = "line", lwd = 4, divs = 4, xy = c(-100, -33), label = c("", "2000 km", ""), adj = c(0.5, -0.8), font = 2, cex = 1)
 prettymapr::addnortharrow(scale = 0.75, padin = c(0.2, 0.2))
-addRasterLegend(mean.ring.size, locs = seq(0, 6, 2), cex.axis = 1.2, ramp = pal_bl_red_Mannion, ncolors = 200, border = T, location = c(-115, -112, -33, 0))
+rangeBuilder::addRasterLegend(mean.ring.size, locs = seq(0, 6, 2), cex.axis = 1.2, ramp = pal_bl_red_Mannion, ncolors = 200, border = T, location = c(-115, -112, -33, 0))
 graphics::text(x = -112, y = 6.5, font = 2, cex = 1.2, label = "Mean\nring size")
 
 legend(x = "bottomleft", legend = c("Central America", "East Ecuador", "East Peru", "Mata Atlantica"), 
@@ -233,14 +256,15 @@ Peruvian_index <- which(!is.na(Peruvian_mask@data@values[,1]))
 # Bolivian_mask <- mask(all_indices_stack, Bolivian_hotspot)
 # Bolivian_index <- which(!is.na(Bolivian_mask@data@values[,1]))
 
-Mata_Atlantica_mask <- mask(all_indices_stack, Mata_Atlantica_shp)
+Mata_Atlantica_mask <- mask(all_indices_stack, Mata_Atlantica_shp5)
 Mata_Atlantica_index <- which(!is.na(Mata_Atlantica_mask@data@values[,1]))
 
 # Save indices
 save(Central_America_index, East_Ecuador_index, Peruvian_index, Mata_Atlantica_index, file = "./outputs/Correlation_tests/Bioregions_indices.RData")
 
 # Load df with all values
-indices_df <- readRDS(file = "./outputs/Correlation_tests/Indices_df.rds")
+# indices_df <- readRDS(file = "./outputs/Correlation_tests/Indices_df.rds")
+indices_df <- tibble(sp.richness = sp.richness[], sp.mean.rarity = sp.mean.rarity[], MPD = MPD[], ring.richness = ring.richness[], mimicry.mean.rarity = mimicry.mean.rarity[])
 
 # Add column with region as factor
 indices_df$Region <- "Other"
@@ -356,7 +380,7 @@ inset_map <- ggplot() +
   geom_sf(data = st_as_sf(Central_America_shp2), fill = "#F8766D", col = "#F8766D") +  # "#F8766D"  "red"
   geom_sf(data = st_as_sf(East_Ecuador_shp2), fill = "#7CAE00", col = "#7CAE00") +  # "#7CAE00"  "darkgreen"
   geom_sf(data = st_as_sf(Peruvian_shp2), fill = "#00BFC4", col = "#00BFC4") +  # "#00BFC4"  "blue"
-  geom_sf(data = st_as_sf(Mata_Atlantica_shp2), fill = "#C77CFF", col = "#C77CFF") +  # "#C77CFF"  "purple"
+  geom_sf(data = st_as_sf(Mata_Atlantica_shp5), fill = "#C77CFF", col = "#C77CFF") +  # "#C77CFF"  "purple"
   geom_sf(data = st_as_sf(bg_mask), fill = "aliceblue", col = "grey20") +
   geom_sf(data = scale_bar, fill = "black", col = "black") # +
   # annotate("text", x = -105, y = -30, label = "2000 km", fontface = "bold", size = 4.5) +
@@ -372,16 +396,14 @@ final_inset_graph <- ggdraw() +
   annotate("text", x = 0.623, y = 0.235, label = "2000 km", fontface = "bold", size = 3) +
   ggspatial::annotation_north_arrow(height = unit(0.7, "cm"), width = unit(0.7, "cm"), pad_x = unit(1.2, "cm"), pad_y = unit(7.5, "cm"), location = "br", style = north_arrow_orienteering(text_col = "aliceblue"))
 
-pdf(file = "./graphs/Correlation_tests/Bioregions_Rich_Mim_with_map.pdf", height = 6, width = 8)
-print(final_inset_graph)
-dev.off()
+# pdf(file = "./graphs/Correlation_tests/Bioregions_Rich_Mim_with_map.pdf", height = 6, width = 8)
+# print(final_inset_graph)
+# dev.off()
 
 pdf(file = "./graphs/Correlation_tests/Bioregions_Rich_Mim_with_map_and_GAM.pdf", height = 6, width = 8)
 print(final_inset_graph)
 dev.off()
    
-
-
 
 # Version plot() à intégrer dans l'autre plot via Illustrator
 plot(bbox_sp)
@@ -389,7 +411,7 @@ plot(continent_mask_smooth, col = "#EDEDED", add = T)
 plot(Central_America_shp2, col = "red", border = "red", lwd = 1.5, add = T)
 plot(East_Ecuador_shp2, col = "darkgreen", border = "darkgreen", lwd = 1.5, add = T)
 plot(Peruvian_shp2, col = "blue", border = "blue", lwd = 1.5, add = T)
-plot(Mata_Atlantica_shp2, col = "purple", border = "purple", lwd = 1.5, add = T)
+plot(Mata_Atlantica_shp5, col = "purple", border = "purple", lwd = 1.5, add = T)
 plot(bg_mask, lwd = 0.8, border = "grey20", col = "aliceblue", add = T)
 scalebar(d = 2000, type = "line", lwd = 4, divs = 4, xy = c(-115, -33), label = c("", "2000 km", ""), adj = c(0.5, -0.8), font = 2, cex = 1)
 prettymapr::addnortharrow(scale = 0.5, padin = c(0.4, 0.5))
@@ -429,12 +451,13 @@ names(OMU.stack_Jaccard.80) <- list.models$Tag.model
 
 saveRDS(OMU.stack_Jaccard.80, file = "./outputs/By_OMU/OMU.stack_Jaccard.80.rds", version = "2")
 
+OMU.stack_Jaccard.80 <- readRDS(file = "./outputs/By_OMU/OMU.stack_Jaccard.80.rds")
 
 ### Choose the bioregion ###
 bioreg <- "Central_America" ; cropping_shp <- Central_America_shp
 bioreg <- "East_Ecuador" ; cropping_shp <- East_Ecuador_shp
 bioreg <- "Peruvian" ; cropping_shp <- Peruvian_shp
-bioreg <- "Mata_Atlantica" ; cropping_shp <- Mata_Atlantica_shp
+bioreg <- "Mata_Atlantica" ; cropping_shp <- Mata_Atlantica_shp5
 
 
 ### Crop for specific bioregion ###
@@ -638,6 +661,7 @@ dev.off()
 
 ### 5.2/ Plot scatterplot with different colors for each bioregions, random + original ####
 
+indices_df <- readRDS(file = "./outputs/Correlation_tests/Indices_df_bioregions.rds")
 indices_df_random_orig <- bind_rows(indices_df, indices_df_random) %>% 
   mutate(type = c(rep("original", nrow(indices_df)), rep("random", nrow(indices_df_random))))
 
