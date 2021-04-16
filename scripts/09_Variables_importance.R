@@ -7,7 +7,7 @@
 #####
 
 # Inputs:
-   # Results of Biomod2 from Script 05.a
+   # Results of Biomod2 from Script 05.1
 
 # Outputs:
    # Boxplot of variable importance per OMU, and globally

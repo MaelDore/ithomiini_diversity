@@ -1,0 +1,30 @@
+var dataset = ee.ImageCollection('GLCF/GLS_TCC')
+ .filter(ee.Filter.date('2005-01-01', '2010-12-31'));
+ 
+// Besoin de prendre la moyenne car il s'agit d'une collection d'images et que l'on veut exporter une image moyenne finale
+var treeCanopyCover = dataset.select('tree_canopy_cover').mean();
+
+// Visualization
+var treeCanopyCoverVis = {
+  min: 0.0,
+  max: 100.0,
+  palette: ['ffffff', 'afce56', '5f9c00', '0e6a00', '003800'],
+};
+Map.setCenter(-75, -10, 3);
+Map.addLayer(treeCanopyCover, treeCanopyCoverVis, 'Tree Canopy Cover');
+
+// Create a geometry representing an export region.
+var geometry = ee.Geometry.Rectangle([-180, -90, 180, 90]); // Full Earth (ne fonctionne pas !)
+// var geometry = ee.Geometry.Rectangle([-180, -90, 0, 90]); // Full Earth - West side
+// var geometry = ee.Geometry.Rectangle([0, -90, 180, 90]); // Full Earth - East side
+// var geometry = ee.Geometry.Rectangle([-120, -37, -30, 28]); // Neotropics
+
+// Export the image, specifying scale and region.
+Export.image.toDrive({
+  image: treeCanopyCover,
+  folder: 'Google Earth Engine',
+  description: 'VCF_Export',
+  scale: 4500, // Scale = m per pixel => 4,5km = 2.5 minutes ; 9km = 5min ; 18km = 10min
+  region: geometry
+});
+

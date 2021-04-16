@@ -6,14 +6,10 @@
 # Generate a continous map for each 4 options between Jaccard/TSS and Buffer.80/95
 
 
-# Create maps at species level by computing "probability" of presence of any of the OMU of the species
-
-# Generate a continous map for each 4 option between Jaccard/TSS and Buffer.80/95
-
 ##### 
 
 # Inputs:
-   # Stack of continous EM and binary maps for each OMU, per mimicry ring
+   # Stack of continous EM and binary maps for each OMU, per mimicry ring from script 11
 
 # Outputs:
    # Mimicry ring probability continous map for each 4 option between Jaccard/TSS and Buffer.80/95 => aggregated with aggreg_proba function

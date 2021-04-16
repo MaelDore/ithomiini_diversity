@@ -43,21 +43,37 @@ names(all_indices_stack) <- index_list <- c("Sp. richness", "Sp. diversity", "Sp
 # save(all_indices_stack, file = "./outputs/Correlation_tests/all_indices_stack.RData", version = 2)
 # saveRDS(all_indices_stack, file = "./outputs/Correlation_tests/all_indices_stack.rds", version = 2)
 
+# load(file = "./outputs/Correlation_tests/all_indices_stack.RData")
+
 # Choose the set of indices
 set <- "full" ; select_indices <- 1:20
 set <- "MRS_pheno" ; select_indices <-  c(1:5, 7:10, 16)
 set <- "MRS_max_pheno" ; select_indices <-  c(1:5, 7:10, 12, 16)
 set <- "MRS" ; select_indices <-  c(1:5, 7:10)
 set <- "MRS_max" ; select_indices <-  c(1:5, 7:10, 12)
+set <- "SM_plot" ; select_indices <- c(1, 2, 4, 5, 11, 12, 7, 8, 3, 9)
+
+plot(all_indices_stack[[11]])
 
 # Extract only useful layers
 select_indices_stack <- subset(x = all_indices_stack, select_indices)
 select_index_list <- index_list[select_indices]
 
+if (set == "SM_plot")
+{
+  select_index_list[5] <- "Mean ring size"
+  names(select_indices_stack)[5] <- "Mean ring size"
+}
+
+# save(select_indices_stack, file = "./outputs/Correlation_tests/select_indices_stack.RData", version = 2)
+# saveRDS(select_indices_stack, file = "./outputs/Correlation_tests/select_indices_stack.rds", version = 2)
+# save(select_index_list, file = "./outputs/Correlation_tests/select_index_list.RData", version = 2)
+# saveRDS(select_index_list, file = "./outputs/Correlation_tests/select_index_list.rds", version = 2)
+
 # Load color palette
 pal_bl_red_Mannion <- readRDS(file = "./maps/pal_bl_red_Mannion.rds")
 
-plot(select_indices_stack)
+plot(select_indices_stack, col = pal_bl_red_Mannion)
 
 ### Choose data extraction specification (for corrected tests)
 
@@ -177,11 +193,15 @@ dev.off()
 
 
 ### 1.4/ Plot pairwise plots of index correlation ####
+?pairs
+
+# Only Pearson's correlation... Change to Spearman in Photoshop to save time... Ideally, create a custom function...
 pairs(select_indices_stack)
 
 pdf(file = "./graphs/Correlation_tests/Pairs_graph.pdf", height = 12, width = 12)
 pairs(select_indices_stack)
 dev.off()
+# file.copy(from = paste0("./graphs/Correlation_tests/Pairs_graph.pdf"), to = paste0("./supplementaries/Correlation_pairwise_graph.pdf"), overwrite = T)
 
 # Plot pair graphs without predicts
 plot(sp.mean.rarity[] ~ sp.richness[],
@@ -200,6 +220,12 @@ save(indices_df, file = "./outputs/Correlation_tests/Indices_df.RData", version 
 saveRDS(indices_df, file = "./outputs/Correlation_tests/Indices_df.rds", version = 2)
 
 indices_df <- readRDS(file = "./outputs/Correlation_tests/Indices_df.rds")
+
+# Try Boris's option
+
+# indices_df <- indices_df %>% drop_na()
+Rarity::corPlot(df = as.data.frame(indices_df), method = "spearman", digits = 2, na.action = NA)
+
 
 g1 <- ggplot(data = indices_df, aes(x = sp.richness, y = sp.mean.rarity)) +
   geom_point() +
@@ -722,6 +748,62 @@ dev.off()
 # pheatmap(mat = abs(rho_matrix))
 
 
+# 4/ Full pairwise correlation plot ####
+
+
+
+function <- plot_pairwise_correlation_scatterplot(map_1, map_2,
+                                                  index_1, index_2, 
+                                                  correlation_value)
+{
+  
+}
+
+g5 <- ggplot(data = indices_df, aes(x = sp.richness, y = mimicry.mean.rarity)) +
+  geom_point() +
+  geom_smooth(color = "red", size = 1.5, se = F) +
+  annotate("text", x = max(indices_df$sp.richness), y = min(indices_df$mimicry.mean.rarity), hjust = 1, vjust = 0.9, label = "b", size = 7, fontface = 2) +
+  annotate("text", x = max(indices_df$sp.richness), y = max(indices_df$mimicry.mean.rarity), hjust = 0.9, vjust = -0.2, label = bquote(rho ~ "= 0.62"), size = 5, fontface = 2) +
+  ylab(label = "Mimicry mean rarity\n[Rarity index]") +
+  xlab(label = "Species richness\n[Species]") +
+  scale_x_continuous(breaks = seq(0, 125, 25)) + 
+  scale_y_continuous(breaks = seq(0, 1, 0.25), limits = c(0, 1)) +  
+  theme_gray() +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.border = element_rect(fill = NA),
+        axis.ticks = element_line(size = 1.2),
+        axis.ticks.length = unit(5, "pt"),
+        axis.text = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.title.x = element_text(margin = margin(t = 10, b = 5)),
+        axis.title.y = element_text(margin = margin(l = 5, r = 10)))
+
+print(g5)
+
+library(gridExtra)
+
+# Plot the selected pairwise plots. With MPD ~ Species richness
+
+pdf(file = "./graphs/Correlation_tests/Selected_pairs_graph_smoothed_MPD.pdf", height = 10, width = 10)
+# pdf(file = "./graphs/Correlation_tests/Selected_pairs_graph.pdf", height = 10, width = 10)
+grid.arrange(g1, g2, g3, g4,
+             widths = c(10, 0.4, 10),  # Width of columns
+             heights = c(10, 0.2, 10),
+             nrow = 3,
+             ncol = 3,
+             layout_matrix = rbind(c(1, NA, 2),  # Position of ggplots in the layout
+                                   c(NA, NA, NA),
+                                   c(3, NA, 4)))
+dev.off()
+
+
+
+
+
+
+
+############################### Other tests for correlation ########################################
+
 
 ### Extraction of coordinates inside Ithomiini range from raster
 
@@ -1139,7 +1221,7 @@ model <- mgcv::gam(PD.raster[] ~ sp.richness[] + s(x_cor, y_cor)) # s() pour smo
 summary(model) ; plot(model) # Permet de visualiser la forme de la relation sous forme de courbe lissée et de détecter d'éventuel effet quadratique à tester en modèle LM/GLM/MM/GMM classiques via anova(mod1,mod2)
 
 
-##### Test correlation avec functions package raster => ne prend pas en compte la strucutre spatiale !!!
+##### Test correlation avec functions package raster => ne prend pas en compte la structure spatiale !!!
 load(file = paste0(internal.wd,"/Com.sp.richness.RData"))
 
 load(file = paste0(internal.wd,"/Com.PD.RData"))

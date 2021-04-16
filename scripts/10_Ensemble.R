@@ -9,7 +9,7 @@
 
 # Inputs:
    # Summary table for OMU models (list.models)
-   # Submodel maps from Script 05.a
+   # Submodel maps from Script 05.1
    # List of selected models for ensemble from Script 08
    # Optimized thresholds for binarization from Script 07
 
@@ -592,4 +592,160 @@ g <- ggplot(gg_TSS, aes(x = Algo, y = value, fill = model_type)) +
        x = "Algorithm")
 print(g)
 dev.off()
+
+
+### 5/ Build a global response plot for all OMU using only submodels retained for ensemble ####
+
+# Generate df to store data for global response plot
+resp.df_all_units_Jaccard <- resp.df_all_units_TSS <- tibble()
+
+# Load Summary table for OMU models to extract list of unit
+load(file = paste0("./input_data/list.models.RData"))
+
+# Extract only OMU with a valid EM
+list.models_valid <- list.models[list.models$initial_model_type %in% c("complete", "restricted"),]
+
+# Load summary table for sub_models to retrieve the list of valid submodel to include in the ensemble
+list.submodels <- readRDS(file = "./input_data/list.submodels.rds")
+
+valid_submodels_names_Jaccard <- list.submodels$model_name[list.submodels$Ensemble_OK_Jaccard] # Jaccard
+valid_submodels_names_TSS <- list.submodels$model_name[list.submodels$Ensemble_OK_TSS] # TSS
+
+# To choose the eval metric for selection
+evaluation_metric_list <- c("Jaccard", "TSS")
+
+# i <- 1
+
+# Loop per unit
+for (i in seq_along(list.models_valid$Tag.model))
+{
+  unit <- list.models_valid$Tag.model[i]
+  
+  # Get df storing all info to build response plot for one OMU
+  resp.df <- readRDS(file = paste0("./controls/response_plots/By_OMU/",unit,"/resp.df_",unit,".rds"))
+  
+  # For each evaluation metric
+  for(j in seq_along(evaluation_metric_list))
+  {
+    evaluation_metric <- evaluation_metric_list[j]
+    
+    # Filter the resp.df
+    if(evaluation_metric == "Jaccard")
+    {
+      resp.df_filtered <- resp.df[which(resp.df$Model %in% valid_submodels_names_Jaccard), ] # Jaccard
+    } else {
+      resp.df_filtered <- resp.df[which(resp.df$Model %in% valid_submodels_names_TSS), ] # TSS
+    }
+    
+    # Extract median value to built df for all OMU EM
+    resp.df_unit_EM <- resp.df_filtered %>% 
+      group_by(Variable, Var.value) %>%  # Regroup rows by predictor (Variable) and predictor value (Var.value)
+      summarize(unit = unit,
+                median_pred = median(Response, na.rm = TRUE),  # Compute median prediction = EM
+                Range_min = first(Range_min), # Keep range info
+                Range_max = first(Range_max)) %>% # Keep range info
+      ungroup()
+    
+    
+    # Store the data into the global df for Jaccard and TSS
+    if(evaluation_metric == "Jaccard")
+    {
+      resp.df_all_units_Jaccard <- rbind(resp.df_all_units_Jaccard, resp.df_unit_EM)
+      saveRDS(resp.df_all_units_Jaccard, file = paste0("./controls/response_plots/resp.df_all_units_",evaluation_metric,".rds"))
+    } else {
+      resp.df_all_units_TSS <- rbind(resp.df_all_units_TSS, resp.df_unit_EM)
+      saveRDS(resp.df_all_units_TSS, file = paste0("./controls/response_plots/resp.df_all_units_",evaluation_metric,".rds"))
+      
+    }
+        
+    # Plot only the EM response curves for this unit
+    
+    # p_unit <- ggplot(resp.df_unit_EM, aes(x = Var.value, y = median_pred)) + 
+    #   geom_line(alpha = 1) + # Plot lines for each model
+    #   facet_wrap(~Variable, scales = "free_x") +  # make a plot per variable
+    #   theme_bw() + 
+    #   ylim(0, 1) +
+    #   xlab("Variable value") +
+    #   labs(title = paste0("Post-selection response plots for ", unit, "\n", evaluation_metric, " threshold")) +
+    #   geom_vline(aes(xintercept = Range_min), lwd = 1, col = "red") +
+    #   geom_vline(aes(xintercept = Range_max), lwd = 1, col = "red")
+    # 
+    # print(p_unit)
+    
+    # 5.1/ Update response plots for this unit/OMU. ####
+    
+    # Post-selection (Models are discarded on the basis of evaluation or weird response curve) 
+    
+    p_unit <- ggplot(resp.df_filtered, aes(x = Var.value, y = Response)) + 
+      geom_line(alpha = 0.2, aes(group = Model)) + # Plot lines for each model
+      stat_smooth(method = 'gam', formula = y ~ s(x, bs = "cs")) + # Generate GAM smoothed curve for each mini-plot
+      facet_wrap(~Variable, scales = "free_x") +  # make a plot per variable
+      theme_bw() + 
+      ylim(0, 1) +
+      xlab("Variable value") +
+      labs(title = paste0("Post-selection response plots for ", unit, "\n", evaluation_metric, " threshold")) +
+      geom_vline(aes(xintercept = Range_min), lwd = 1, col = "red") +
+      geom_vline(aes(xintercept = Range_max), lwd = 1, col = "red")
+    
+    # Save plot for this OMU
+    pdf(file = paste0("./controls/response_plots/By_OMU/",unit,"/Post_select_response_plots_",evaluation_metric, "_", unit,".pdf"), height = 6, width = 10)
+    print(p_unit)
+    dev.off()
+    
+  }
+  
+  # Check advancement
+  if(i %% 10 == 0)
+  {
+    cat(paste0("\n", Sys.time()," ------ ", unit, " = Unit N°",i,"/",nrow(list.models_valid)," ------\n")) 
+  }
+  
+}
+
+# 5.2/ Global response plot for all OMUs ####
+
+evaluation_metric_list <- c("Jaccard", "TSS")
+
+for(j in seq_along(evaluation_metric_list))
+{
+  evaluation_metric <- evaluation_metric_list[j]
+  
+  # Load data
+  resp.df_all_units <- readRDS(file = paste0("./controls/response_plots/resp.df_all_units_",evaluation_metric,".rds"))
+  
+  # Update range min and max for all OMUs
+  resp.df_all_units_ranges <- resp.df_all_units %>% 
+    group_by(Variable) %>% 
+    summarize(Range_min = min(Range_min), # Keep range info
+              Range_max = max(Range_max)) %>% # Keep range info
+    ungroup() %>% 
+    left_join(x = resp.df_all_units[, !(names(resp.df_all_units) %in% c("Range_min", "Range_max"))], y = ., by = "Variable")
+  
+  # Generate plot
+  p_all_units <- ggplot(resp.df_all_units_ranges, aes(x = Var.value, y = median_pred)) + 
+    geom_line(alpha = 0.2, aes(group = unit)) + # Plot lines for each model
+    stat_smooth(method = 'gam', formula = y ~ s(x, bs = "cs")) + # Generate GAM smoothed curve for each mini-plot
+    facet_wrap(~Variable, scales = "free_x") +  # make a plot per variable
+    theme_bw() + 
+    ylim(0, 1) +
+    xlab("Variable value") +
+    labs(title = paste0("Post-selection response plots for all modeled OMUs\n", evaluation_metric, " threshold")) +
+    geom_vline(aes(xintercept = Range_min), lwd = 1, col = "red") +
+    geom_vline(aes(xintercept = Range_max), lwd = 1, col = "red")
+  
+  # Save response plot for all OMU
+  pdf(file = paste0("./controls/response_plots/All_OMUs_Post_select_response_plots_",evaluation_metric,".pdf"), height = 6, width = 10)
+  print(p_all_units)
+  dev.off()
+}
+
+
+
+
+
+
+
+
+
+
 

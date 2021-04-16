@@ -1,7 +1,7 @@
 
 ##### Script 11: Clipping maps #####
 
-# Use alpha-hull around occurrences points and a buffer proportionnal to the quality of presence sampling to clip the maps
+# Use alpha-hull around occurrences points and a buffer proportional to the quality of presence sampling to clip the maps
 # Clip EM maps and individual submodel projections, for each OMU
 
 #####
@@ -9,9 +9,9 @@
 # Inputs:
    # Buffer for continental borders
    # Buffer for Andean regions
-   # OMU occurrence coordinates (to draw the alpha-hull)
-   # Stack of EM for each OMU
-   # Stack of submodels for each OMU
+   # OMU occurrence coordinates (to draw the alpha-hull) from Script 01
+   # Stack of EM for each OMU from script 10
+   # Stack of submodels for each OMU from script 10
 
 # Outputs:
    # Buffer value based on 80%/95% quantile of occurrences distance to closest point

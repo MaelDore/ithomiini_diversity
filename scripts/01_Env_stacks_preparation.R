@@ -7,7 +7,7 @@
 # 2/ Select climatic variables based on correlation, clustering, and biological signifiance
 # 3/ Import elevation data
 # 4/ Import forest cover data
-# 5/ Synchronize NA and stack all environnemental layers 
+# 5/ Synchronize NA and stack all environmental layers 
 # 6/ Check for correlation in the final stack
 
 ### Inputs:
@@ -67,6 +67,7 @@ Merra_clim_5 <- mask(envData, BioClim_mask) # Apply Bioclim mask to keep only te
 # plot(Merra_clim_5[[1]])
 
 save(Merra_clim_5, file = "./input_data/MERRA_Clim/MERRAClim_5m_full.RData")
+saveRDS(Merra_clim_5, file = "./input_data/MERRA_Clim/MERRAClim_5m_full.rds")
 
 # Crop to Neotropics
 
@@ -127,6 +128,7 @@ library(vegan)
 # Need to subsample for only 10000 pixels
 data_clim <- data.frame(rep(NA,10000))
 
+set.seed(5452)
 index.sample <- sample(x = which(!is.na(clim_stack[[1]]@data@values)), size = 10000) # Get index of cells which are not NA
 
 for (i in 1:(length(names(clim_stack)))) {
@@ -379,7 +381,7 @@ saveRDS(Select_env, file = paste0("./input_data/Env_data/Select_env_", res, ".rd
 res <- "5"
 res <- "15"
 
-envData <- readRDS(Select_env, file = paste0("./input_data/Env_data/Select_env_", res, ".rds"))
+envData <- readRDS(file = paste0("./input_data/Env_data/Select_env_", res, ".rds"))
 
 # Need to subsample for only 10000 pixels
 data_full <- data.frame(rep(NA,10000))
@@ -408,3 +410,4 @@ dev.off()
 
 # Check VIF, including Elevation and Forests
 usdm::vif(data_full)
+?performance::multicollinearity()

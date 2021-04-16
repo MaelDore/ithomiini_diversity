@@ -25,13 +25,14 @@
 # Clean environnement
 rm(list = ls())
 
-# setwd("D:/Mael/R_projects/ithomiini_current/")
+# setwd("D:/Mael/R_projects/ithomiini_diversity/")
 
 ##### 1/ Compute and plot response curve per variable, per model (i.e., OMU*algo*PA*RUN) #####
 
 ### 1.1/ Generate summary table per variable, per model (i.e., OMU*algo*PA*RUN) ####
 
 library(tidyverse)
+library(raster)
 
 ### Compute the length of the summary table as the sum of nb of model success * nb of variables used in the model, for each modeled OMU
 
@@ -146,7 +147,7 @@ res <- "15"
 # Load environmental stack to control nb of variables used for modeling
 envData <- readRDS(file = paste0("./input_data/Env_data/Select_env_", res, ".rds"))
 
-# Load summary table for repsonse plots
+# Load summary table for response plots
 Response_plot_summary_table <- readRDS(file = "./controls/response_plots/Response_plot_summary_table.rds")
 
 
@@ -347,7 +348,7 @@ for (i in index_model_to_compute) {
       Response_plot_summary_table$variable[l] <- vars[k]
       
       resp.df_sub.model_var <- resp.df_sub.model[resp.df_sub.model$Variable == vars[k], ]
-      # # For Model fit and test for multimodality restricited to the range of presence data
+      # # For Model fit and test for multimodality restricted to the range of presence data
       # min <- resp.df_sub.model_var$Range_min[1] ; max <- resp.df_sub.model_var$Range_max[1]
       # resp.df_sub.model_var_in_range <- resp.df_sub.model_var[(resp.df_sub.model_var$Var.value > min) & (resp.df_sub.model_var$Var.value < max), ]
       # Var_values <- resp.df_sub.model_var_in_range$Var.value
@@ -535,5 +536,4 @@ Response_plot_summary_table <- Resume.table.to.build %>%
 
 # save(Response_plot_summary_table, file = "./controls/response_plots/Response_plot_summary_table.RData", version = "2")
 # saveRDS(Response_plot_summary_table, file = "./controls/response_plots/Response_plot_summary_table.rds", version = "2")
-
 

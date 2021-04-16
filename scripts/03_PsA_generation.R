@@ -229,8 +229,8 @@ temp <- foreach (k = seq_along(unit.list), .combine = progcombine_rbind(nreps = 
     
     # Compute weights for probability of drawing a site
     weights <-  Closest.dist[index.potential.PsA]
-    # weights <-  1/(weights*weights) # Weights are inversly proportionnal to the square of distance such as 1/d²
-    weights <-  1/(weights) # Weights are inversly proportionnal to distance such as 1/d
+    # weights <-  1/(weights*weights) # Weights are inversely proportional to the square of distance such as 1/d²
+    weights <-  1/(weights) # Weights are inversly proportional to distance such as 1/d
     # weights <- (weights - min(weights)) / (max(weights) - min(weights)) # Normalise to 0 - 1 range
     
     # Generate temporary PA.table to store indices of sampling sites

@@ -338,6 +338,7 @@ saveRDS(gg_TSS, file = "./controls/evaluations/Full_df_TSS.rds", version = "2")
 
 ### 3.1/ Global plots ####
 
+# Load df of sub_model evaluations
 gg_jaccard <- readRDS(file = "./controls/evaluations/Full_df_Jaccard.rds")
 gg_TSS <- readRDS(file = "./controls/evaluations/Full_df_TSS.rds")
 
@@ -363,6 +364,49 @@ ggplot(gg_TSS, aes(x = Algo, y = value, fill = model_type)) +
   labs(title = "Global evaluation of all models with TSS indices",
        y = "TSS indices",
        x = "Algorithm")
+dev.off()
+
+# Enhanced plot for Supplementaries
+pdf(file = paste0("./supplementaries/Eval_Jaccard_boxplot.pdf"), height = 6, width = 10) 
+gg_jaccard_plot <- ggplot(gg_jaccard, aes(x = Algo, y = value, fill = model_type)) +
+  geom_boxplot(show.legend = T) +
+  ylim(c(0.4, 1)) +
+  geom_hline(yintercept = 0.6, col = "red", lwd = 1, lty = 2) +
+  geom_hline(yintercept = 0.95, col = "dodgerblue", lwd = 1, lty = 2) +
+  labs(y = "Jaccard index",
+       x = "Algorithm") +
+  # ggthemes::geom_rangeframe(data = data.frame(y = c(0.4, 1)), aes(y = y), sides = "l", size = 1.4) +
+  scale_fill_manual(name = " Model type",
+                      labels = c("Complete", "Restricted"),
+                      values = c("#F8766D", "#00BFC4")) +
+
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.0),
+        legend.position = c(0.095, 0.12),
+        legend.background = element_rect(fill = "white", color = "white", size = 10),
+        legend.key = element_rect(fill = "white", colour = "white"),
+        legend.title = element_text(size = 14, vjust = 2, face = "bold"),
+        legend.text = element_text(size = 12, face = "bold"),
+        # margin = margin(t = 0, unit = "pt")),
+        # legend.key.size = unit(1.5, 'lines'),
+        # legend.spacing.y = unit(1,"cm"),
+        # axis.line.y = element_line(size = 1, color = "black", linetype = 1),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_line(size = 1.2),
+        axis.ticks.length.y = unit(5, "pt"),
+        axis.text.y = element_text(size = 16, face = "bold", color = "black", margin = margin(r = 5)),
+        axis.text.x = element_text(size = 18, face = "bold", color = "black", margin = margin(t = 10)),
+        axis.title = element_text(size = 18, face = "bold"),
+        # axis.title.x = element_text(margin = margin(t = 10, b = 5)),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(margin = margin(l = 5, r = 15))) +
+  
+  annotate(geom = "text", x = 1.18, y = 0.492, size = 5, fontface = "bold", 
+           label = "Threshold", color = "black") +
+  annotate(geom = "segment", x = 1.0, xend = 1.4, y = 0.445, yend = 0.445,
+           size = 1.3, linetype = 2, color = "red") +
+  annotate(geom = "segment", x = 1.0, xend = 1.4, y = 0.417, yend = 0.417,
+           size = 1.3, linetype = 2, color = "dodgerblue")
+print(gg_jaccard_plot)
 dev.off()
 
 
@@ -413,5 +457,40 @@ for (i in 1:nrow(modeled_OMU))
   
 }
 
+### 4/ Quick stats ####
 
+# Load df of sub_model evaluations
+
+
+gg_jaccard <- readRDS(file = "./controls/evaluations/Full_df_Jaccard.rds")
+
+# For RF models
+
+RF_complete <- subset(gg_jaccard, subset = (Algo == "RF") & (model_type == "complete"))$value
+round(sum(RF_complete > 0.6) / length(RF_complete) * 100, 1)
+
+RF_restricted <- subset(gg_jaccard, subset = (Algo == "RF") & (model_type == "restricted"))$value
+round(sum(RF_restricted > 0.95) / length(RF_restricted) * 100, 1)
+
+(sum(RF_complete > 0.6) + sum(RF_restricted > 0.95)) / (length(RF_complete) + length(RF_restricted))
+
+# For GBM models
+
+GBM_complete <- subset(gg_jaccard, subset = (Algo == "GBM") & (model_type == "complete"))$value
+round(sum(GBM_complete > 0.6) / length(GBM_complete) * 100, 1)
+
+GBM_restricted <- subset(gg_jaccard, subset = (Algo == "GBM") & (model_type == "restricted"))$value
+round(sum(GBM_restricted > 0.95) / length(GBM_restricted) * 100, 1)
+
+(sum(GBM_complete > 0.6) + sum(GBM_restricted > 0.95)) / (length(GBM_complete) + length(GBM_restricted))
+
+# For ANN models
+
+ANN_complete <- subset(gg_jaccard, subset = (Algo == "ANN") & (model_type == "complete"))$value
+round(sum(ANN_complete > 0.6) / length(ANN_complete) * 100, 1)
+
+ANN_restricted <- subset(gg_jaccard, subset = (Algo == "ANN") & (model_type == "restricted"))$value
+round(sum(ANN_restricted > 0.95) / length(ANN_restricted) * 100, 1)
+
+(sum(ANN_complete > 0.6) + sum(ANN_restricted > 0.95)) / (length(ANN_complete) + length(ANN_restricted))
 

@@ -216,7 +216,7 @@ for (k in seq_along(unit.list)) {
   # Save final Spatial Object
   save(unit.points, file = paste0("./input_data/Species_data/",res,"/Spatial_Points_Objects/occurrences_", unit,".RData")) # Sauvegarde du nouvel objet spatial des P/A
   
-  # Save environnmental stack with modifs for extrapolated data
+  # Save environmental stack with modifs for extrapolated data
   unit.env <- dropLayer(x = unit.env, i = 1) # Remove Occurrence layer
   save(unit.env, file = paste0("./input_data/Species_data/",res,"/Env_Stacks/Env_stack_",unit,".RData")) 
   

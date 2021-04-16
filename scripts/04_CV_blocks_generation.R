@@ -9,7 +9,7 @@
 # Inputs:
    
    # Summary table for OMU models (list.models)
-   # Spatial object wit occurrences and PsA coordinates from Script 03
+   # Spatial object with occurrences and PsA coordinates from Script 03
    # PA tables from script 03
 
 # Outputs:
@@ -87,7 +87,7 @@ temp <- foreach (k = seq_along(unit.list), .combine = progcombine_rbind(nreps = 
     
     cat("\n", as.character(Sys.time()), "----- CV blocks generation starts for", unit, "= Unit N°",k,"\n")
     
-    # load libraries
+    # load libraries (needed inside the loop when using parallelization)
     
     library(raster)
     library(sf)
@@ -109,7 +109,7 @@ temp <- foreach (k = seq_along(unit.list), .combine = progcombine_rbind(nreps = 
     
     # NA = not use in this run. T = calibration/learning set. F = validation/test set.
     # Start with array full of NA.
-    calib_array <- array(dim = c(nrow(PA.table),   # Number of occrrences and PsA
+    calib_array <- array(dim = c(nrow(PA.table),   # Number of occurrences and PsA
                                  nb.of.folds,      # Number of CV folds
                                  ncol(PA.table)),  # Number of PsA_set
                          dimnames = list(NULL,                              # No name for point rows

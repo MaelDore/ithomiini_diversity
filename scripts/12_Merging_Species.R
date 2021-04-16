@@ -4,15 +4,15 @@
 
 # Create maps at species level by computing "probability" of presence of any of the OMU of the species
 
-# Generate a continous map for each 4 option between Jaccard/TSS and Buffer.80/95
+# Generate a continuous map for each 4 option between Jaccard/TSS and Buffer.80/95
 
 ##### 
 
 # Inputs:
-   # Stack of continous EM and binary maps for each OMU, per species
+   # Stack of continuous EM and binary maps for each OMU, per species from script 11
 
 # Outputs:
-   # Species continous map for each 4 option between Jaccard/TSS and Buffer.80/95
+   # Species continuous map for each 4 option between Jaccard/TSS and Buffer.80/95
    # Summary of composition of species stack: with/without rasterized OMU, only rasterized OMU
 
 #####
