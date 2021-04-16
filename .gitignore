@@ -6,6 +6,7 @@ packrat/*
 cluster_folder/*
 outputs/By_OMU/*
 outputs/By_species/*
+outputs/Violaine/*
 controls/*
 packrat/lib*/
 renv/*
