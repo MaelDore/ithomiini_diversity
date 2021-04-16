@@ -10,6 +10,12 @@ controls/*
 packrat/lib*/
 renv/*
 
+# Type of files
+*.psd
+*.tif
+*.tiff
+*.ai
+
 # Les enlever les un après les autres du .gitignore jusqu'à ce que ça marche
 # Restart le Rproj à chaque changement pour qu'ils soient pris en compte et le dossier scannés à la recherche de changements
 
@@ -24,6 +30,8 @@ input_data/Species_data/*
 input_data/Species_data/5/*
 input_data/SRTM/*
 input_data/WWF_official_teow/*
+
+supplementaries/Ithomiini_distribution_maps/*
 
 maps/*
 models/15/*
