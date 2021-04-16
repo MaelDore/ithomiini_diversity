@@ -3,12 +3,12 @@
 
 ## Research Article
 
-This repository contains the code and data used to carry analyses for
-this research article:
+This repository contains the code and data used to carry out analyses
+for this research article:
 
-**Doré et al., 2021 - Global diversity patterns in Ithomiine
-butterflies: hot-spots and threats from anthropogenic pressures** [Link
-to be posted]()
+**Doré et al., 2021 - Anthropogenic pressures coincide with Neotropical
+biodiversity hotspots in a flagship butterfly group** [Link to be
+posted]()
 
 In this study, we provide new maps of the distribution of the different
 facets of Ithomiini diversity in the entire Neotropics in order to

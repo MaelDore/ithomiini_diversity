@@ -16,9 +16,9 @@ Title <- "Global diversity patterns in Ithomiine butterflies: hot-spots and thre
 
 ## Research Article
 
-This repository contains the code and data used to carry analyses for this research article:
+This repository contains the code and data used to carry out analyses for this research article:
 
-__Doré et al., 2021 - Global diversity patterns in Ithomiine butterflies: hot-spots and threats from anthropogenic pressures__ [Link to be posted]()
+__Doré et al., 2021 - Anthropogenic pressures coincide with Neotropical biodiversity hotspots in a flagship butterfly group__ [Link to be posted]()
 
   In this study, we provide new maps of the distribution of the different facets of Ithomiini diversity in the entire Neotropics in order to identify areas of both evolutionary and ecological importance for conservation. Our study build on a large and previously unpublished dataset of ca. 30 000 geolocalized occurrences, and a recently published phylogeny of the entire tribe to present diversity analyses and a conservation assessment to an unprecedent taxonomic and geographic scale for a non-Vertebrate taxon in the Neotropics. Specifically, we map mimicry ring and species richness, geographic rarity, as well as phylogenetic diversity. We evaluate spatial congruence among those diversity indices and assess current anthropogenic threats to diversity hotspots.  
 

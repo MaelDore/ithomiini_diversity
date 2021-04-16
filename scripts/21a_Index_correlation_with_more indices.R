@@ -751,14 +751,6 @@ dev.off()
 # 4/ Full pairwise correlation plot ####
 
 
-
-function <- plot_pairwise_correlation_scatterplot(map_1, map_2,
-                                                  index_1, index_2, 
-                                                  correlation_value)
-{
-  
-}
-
 g5 <- ggplot(data = indices_df, aes(x = sp.richness, y = mimicry.mean.rarity)) +
   geom_point() +
   geom_smooth(color = "red", size = 1.5, se = F) +

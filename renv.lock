@@ -347,6 +347,13 @@
       "Repository": "CRAN",
       "Hash": "543776ae6848fde2f48ff3816d0628bc"
     },
+    "bayestestR": {
+      "Package": "bayestestR",
+      "Version": "0.8.2",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "c5ea7613d9b5a5a0a5272ee6363aebbd"
+    },
     "bbmle": {
       "Package": "bbmle",
       "Version": "1.0.23.1",
@@ -893,33 +900,12 @@
       "Repository": "CRAN",
       "Hash": "eee36211f74e4dbc80eae9d504b58f0b"
     },
-    "ggimage": {
-      "Package": "ggimage",
-      "Version": "0.2.8",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "7237b654c1fb1fc33cab107cebd7398f"
-    },
-    "ggnewscale": {
-      "Package": "ggnewscale",
-      "Version": "0.4.5",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "5d2d9029aa89360eb283e3d10ab8bf42"
-    },
     "ggplot2": {
       "Package": "ggplot2",
       "Version": "3.3.3",
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "3eb6477d01eb5bbdc03f7d5f70f2733e"
-    },
-    "ggplotify": {
-      "Package": "ggplotify",
-      "Version": "0.0.5",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "01f6ad9ce2c4a474974dac7482e4c19f"
     },
     "ggpubr": {
       "Package": "ggpubr",
@@ -1138,6 +1124,13 @@
       "Repository": "CRAN",
       "Hash": "7b1f856410253d56ea67ad808f7cdff6"
     },
+    "insight": {
+      "Package": "insight",
+      "Version": "0.13.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "8abc2f0ebdf5fa67b46e1f6fa73fe980"
+    },
     "interp": {
       "Package": "interp",
       "Version": "1.0-33",
@@ -1298,13 +1291,6 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "cf96b08482dfbed1b7ab7d0ba4395077"
-    },
-    "magick": {
-      "Package": "magick",
-      "Version": "2.6.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "ffc87958461a1d2a5ec4b36035b87b94"
     },
     "magrittr": {
       "Package": "magrittr",
@@ -1508,6 +1494,13 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "e4c9df9e478e08a32c27a406ce8fba90"
+    },
+    "performance": {
+      "Package": "performance",
+      "Version": "0.7.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "38ed7e3278ce910e43e3dddff1cd26ac"
     },
     "permute": {
       "Package": "permute",
