@@ -50,7 +50,7 @@ sp.list <- list.models$Sp_full
 
 
 ### Load occurrence dataset
-load(file = "./input_data/Ithomiini_final.RData")
+load(file = "./input_data/Databases/Ithomiini_final.RData")
 
 ### Select Env data resolution 
 
@@ -297,7 +297,7 @@ temp <- foreach (k = 2:3) %dopar% {
   cat(as.character(Sys.time()), "----- Start for", unit, "= Unit N°",k,"\n")
   unit.coords <- Ithomiini_final[(Ithomiini_final$Tag.model == unit), c("Longitude","Latitude")] 
   
-  ### 2.2/ Rasterisation des occurrences ####
+  ### 2.2/ Rasterization of occurrences ####
   unit.occ <- rasterize(x = unit.coords, # Occurrence coordinates
                         y = envData, # Env stack grid to apply
                         field = 1, # Value to store in the raster
@@ -497,18 +497,27 @@ test <- actualize_summary_table(temp, list.models, vars = c("N.obs_5m", "N.obs_1
 
 ### 3/ Plot histogram of occurrences availability, depending of the resolution chosen ####
 
+### 3.1/ Play around to define threshold for modeling types ####
+
 hist(list.models$N.obs_5m_used[list.models$N.obs_5m_used<20], breaks  = seq(0,20,2))
 sum((list.models$N.obs_5m_used >= 10) & (list.models$N.obs_5m_used < 30))
 sum((list.models$N.obs_5m_used >= 5) & (list.models$N.obs_5m_used < 30)) 
+sum(list.models$N.obs_5m_used < 6)
 sum(list.models$N.obs_5m_used < 10)
 sum(list.models$N.obs_5m_used >= 30)
 
+table(list.models$initial_model_type)
 
 hist(list.models$N.obs_15m_used[list.models$N.obs_15m_used<20], breaks  = seq(0,20,2))
 sum((list.models$N.obs_15m_used >= 10) & (list.models$N.obs_15m_used < 30))
-sum((list.models$N.obs_15m_used >= 5) & (list.models$N.obs_15m_used < 30)) 
+restricted_15 <- sum((list.models$N.obs_15m_used >= 6) & (list.models$N.obs_15m_used < 30)) 
+rasterized_15 <- sum(list.models$N.obs_15m_used < 6) ; rastesterized_15
 sum(list.models$N.obs_15m_used < 10)
-sum(list.models$N.obs_15m_used >= 30)
+complete_15 <- sum(list.models$N.obs_15m_used >= 30)
+
+perc_complete_15 <- round(complete_15/nrow(list.models)*100,1)
+perc_restricted_15 <- round(restricted_15/nrow(list.models)*100,1)
+perc_rasterized_15 <- round(rasterized_15/nrow(list.models)*100,1)
 
 obs_data <- data.frame(N.obs = c(list.models$N.obs_5m_used, list.models$N.obs_15m_used), Type = c(rep("5m", times = nrow(list.models)), rep("15m", times = nrow(list.models))))
 
@@ -541,6 +550,98 @@ table(list.models$N.obs_15m_used)
 
 scales::show_col(colors(), labels = FALSE)
 
+### 3.2/ Plot bar chart for occurrences at resolution 15min ###
+
+obs_data_15 <- data.frame(N.obs = list.models$N.obs_15m_used)
+obs_data_15$model_type <- as.factor(cut(x = obs_data_15$N.obs, breaks = c(0, 5, 30, 500), right = F))
+
+rasterized_sp <- length(unique(list.models$Sp_full[obs_data_15$model_type == "[0,5)"]))
+restricted_sp <- length(unique(list.models$Sp_full[obs_data_15$model_type == "[5,30)"]))
+complete_sp <- length(unique(list.models$Sp_full[obs_data_15$model_type == "[30,500)"]))
+
+modeled_sp <- length(unique(list.models$Sp_full[obs_data_15$model_type != "[0,5)"]))
+
+# Function to increase vertical spacing between legend keys
+
+draw_key_polygon3 <- function(data, params, size) {
+  lwd <- min(data$size, min(size) / 4)
+  
+  grid::rectGrob(
+    width = grid::unit(0.6, "npc"),
+    height = grid::unit(0.6, "npc"),
+    gp = grid::gpar(
+      col = data$colour,
+      fill = alpha(data$fill, data$alpha),
+      lty = data$linetype,
+      lwd = lwd * .pt,
+      linejoin = "mitre"
+    ))
+}
+
+# Register new key drawing function, 
+# The effect is global & persistent throughout the R session
+GeomBar$draw_key = draw_key_polygon3
+
+pdf(file = "./supplementaries/Distribution_occurrences.pdf", width = 8, height = 6)
+
+# Histogram
+obs_data_15 %>%
+  # filter(obs_data$N.obs <= 50) %>%
+  ggplot(aes(x = N.obs, fill = model_type)) + 
+  geom_histogram(binwidth = 3, position = "identity") +
+  # geom_vline(xintercept = c(5, 30)) +
+  
+  scale_fill_manual(name = "Model type",
+                    breaks = c("[0,5)", "[5,30)", "[30,500)"),
+                    labels = c(paste0('"Rasterized" models (N < 6)\n', rasterized_15 ,' OMUs (', perc_rasterized_15,'%)'),
+                               paste0('"Restricted" models (6 \u2264 N < 30)\n', restricted_15 ,' OMUs (', perc_restricted_15,'%)'),
+                               paste0('"Complete" models (N \u2265 30)\n', complete_15 ,' OMUs (', perc_complete_15,'%)')),
+                    values = c("#FF0000BB", "#FFA500BB", "#32CD32BB")) +
+  
+  ylab("Counts") +
+  xlab("Number of occurrences per OMU") +
+  
+  labs(fill = "Model type") +
+  
+  # title(main = "Distribution of occurrences per OMU") +
+  
+  # # Rectangle for "rasterized" OMU
+  # annotate("rect", xmin = -1.5, xmax = 5, ymin = 0, ymax = 252,
+  #          col = NA, fill = "red", alpha = 0.5) +
+  # 
+  # # Rectangle for "restricted" OMU
+  # annotate("rect", xmin = 5, xmax = 30, ymin = 0, ymax = 200,
+  #          col = NA, fill = "orange", alpha = 0.5) +
+  # 
+  # # Rectangle for "restricted" OMU
+  # annotate("rect", xmin = 30, xmax = 400, ymin = 0, ymax = 50,
+  #          col = NA, fill = "limegreen", alpha = 0.5) +
+  
+  ### Manual legend
+  
+  # # Rectangle for "rasterized" OMU
+  # annotate("rect", xmin = 100, xmax = 140, ymin = 220, ymax = 240,
+  #          col = "grey80", fill = "red", alpha = 1) +
+  
+  ggplot2::theme(panel.background = ggplot2::element_rect(fill = NA),
+                 plot.title = ggplot2::element_text(size = 18, face = "bold", hjust = 0.5, vjust = 3),
+                 legend.position = c(0.75, 0.55),
+                 legend.title = ggplot2::element_text(size = 15, vjust = 2, hjust = 0.05, face = "bold"),
+                 legend.text = ggplot2::element_text(size = 12, face = "bold", hjust = 0.5, margin = margin(l = -10, unit = "pt")),
+                 legend.key = element_rect(size = 50, color = NA, fill = NA),
+                 legend.key.size = unit(40, 'pt'),
+                 # plot.margin = ggplot2::margin(t = 18, unit = "pt"),
+                 # axis.line.x = ggplot2::element_line(color = NA),
+                 axis.line = ggplot2::element_line(color = "black", size = 1.3),
+                 axis.ticks = ggplot2::element_line(color = "black", size = 1.2),
+                 axis.ticks.length = ggplot2::unit(8, "pt"),
+                 axis.text = ggplot2::element_text(size = 16, face = "bold", color = "black"),
+                 axis.text.x = ggplot2::element_text(vjust = -4, size = 14, margin = ggplot2::margin(t = -5, b = 20)),
+                 axis.title = ggplot2::element_text(size = 16, face = "bold", color = "black"),
+                 # axis.title.x = ggplot2::element_text(margin = margin(t = 10, b = 5)),
+                 axis.title.y = ggplot2::element_text(margin = ggplot2::margin(l = 5, r = 10)))
+
+dev.off()
 
 
 ### 4/ Add initial_model_type ####

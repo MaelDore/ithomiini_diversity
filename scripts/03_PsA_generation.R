@@ -81,18 +81,18 @@ sampling.sites_coords_with_index_and_cell_nb <- raster_infos %>%
   unique() %>% 
   arrange(sampling_ID)
 
-save(sampling.sites_coords_with_index_and_cell_nb, file = "./input_data/Sampling_sites/sampling.sites_coords_with_index_and_cell_nb.RData")
+save(sampling.sites_coords_with_index_and_cell_nb, file = paste0("./input_data/Sampling_sites/sampling.sites_coords_with_index_and_cell_nb_",res,".RData"))
 
 sampling.sites_coords <- sampling.sites_coords_with_index_and_cell_nb %>% 
   select(Longitude_raster, Latitude_raster)
 
-save(sampling.sites_coords, file = "./input_data/Sampling_sites/sampling.sites_coords.RData")
+save(sampling.sites_coords, file = paste0("./input_data/Sampling_sites/sampling.sites_coords_",res,".RData"))
 
 
 ### Compute distance matrix of all sampling sites
 Sampling.sites.Dist = geosphere::distm(x = sampling.sites_coords)/1000 # Geometric distance on WGS84 ellipsoid, in km
 
-save(Sampling.sites.Dist, file = "./input_data/Sampling_sites/Sampling.sites.Dist.RData")
+save(Sampling.sites.Dist, file = paste0("./input_data/Sampling_sites/Sampling.sites.Dist_",res,".RData"))
 
 
 ##### 2/ Get a record of sampling sites that do not have associated env. data to discard them from the potential PsA pool ####
@@ -117,7 +117,7 @@ for (i in 1:nrow(sampling.sites_coords)) {
 
 sum(!sampling.sites_coords$env_data) # 116 sampling sites out of 1834 are not available to draw PsA because they lack env data
 
-save(sampling.sites_coords, file = "./input_data/Sampling_sites/sampling.sites_coords.RData")
+save(sampling.sites_coords, file = paste0("./input_data/Sampling_sites/sampling.sites_coords_",res,".RData"))
 
 
 ##### 3/ Generate PA tables: Parallelized version #####
@@ -128,7 +128,7 @@ save(sampling.sites_coords, file = "./input_data/Sampling_sites/sampling.sites_c
 # Modify lines that assign value in object outside of the loop : list.models
 #    N.obs et dérivés
 # Generate a return(list()) for these objects that are not saved at each iteration, typically infos you want to store in a vector/list/table for each iteration
-# Add script to geenrate and close the cluster
+# Add script to generate and close the cluster
 # foreach ... %dopar%
 
 
@@ -157,7 +157,7 @@ unit.list <- list.models$Tag.model
 sp.list <- list.models$Sp_full
 
 ### Load occurrence dataset
-load(file = "./input_data/Ithomiini_final.RData")
+load(file = "./input_data/Databases/Ithomiini_final.RData")
 
 ### Select Env data resolution 
 
@@ -169,12 +169,12 @@ res <- "15"
 envData <- readRDS(file = paste0("./input_data/Env_data/Select_env_", res, ".rds"))
 
 ### Load sampling sites infos for PsA Generation
-load(file = "./input_data/Sampling_sites/Sampling.sites.Dist.RData")
-load(file = "./input_data/Sampling_sites/sampling.sites_coords.RData")
+load(file = paste0("./input_data/Sampling_sites/Sampling.sites.Dist_",res,".RData"))
+load(file = paste0("./input_data/Sampling_sites/sampling.sites_coords_",res,".RData"))
 
 source("./functions/progcombine.R")
 
-# Set seed to ensure repetability of random PsA draws
+# Set seed to ensure repeatability of random PsA draws
 set.seed(158340)
 
 

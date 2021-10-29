@@ -47,7 +47,7 @@ xmin = -120 ; xmax = -30 ; ymin = -37 ; ymax = 28
 e <- extent(c(xmin,xmax,ymin,ymax))
 rivers <- crop(rivers, e)
 
-### 2/ Generate spatial point object of occurrences
+### 2/ Generate spatial point object of occurrences ####
 
 Occ_shp <- SpatialPoints(coords = Ithomiini_final[, c("Longitude", "Latitude")],
                          proj4string = continent_mask@crs)

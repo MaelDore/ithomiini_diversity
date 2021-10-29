@@ -208,7 +208,7 @@ X4 <- data_clim[,-vars_index] # Responses variables = other climatic variables
 
 RDA4 <- rda(X = X4, Y = Y4 , scale = T) 
 res_RDA <- round(summary(RDA4)$cont[[1]][2:3,]*100, 1) ; res_RDA # To see proportions of constrained and unconstrained inertia
-r2_RDA <- round(RsquareAdj(RDA4)$adj.r.squared, 3) ; r2_RDA
+r2_RDA <- round(RsquareAdj(RDA4)$adj.r.squared, 3) ; r2_RDA # 94.1% of variance explained by the 4 variables
 
 # Test significiance of the RDA with permutation on the pseudo F-ratio
 F_test_RDA <- anova.cca(object = RDA4, permutations = 1000) ; F_test_RDA 

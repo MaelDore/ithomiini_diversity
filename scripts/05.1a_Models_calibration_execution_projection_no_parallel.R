@@ -4,7 +4,7 @@
 
 # Format data under BioMod2 standards
 # Set parameters of algorithms
-# Calibrate SDMs 
+# Calibrate SDMs
 # Project SDMs results under current climatic conditions
 
 
@@ -100,10 +100,10 @@ initial.wd <- getwd()
 library(raster)
 rasterOptions(tmpdir = paste0(initial.wd,"/temp")) # Modify folder to store temporary files for this session (Goal = avoid problem with paths too long)
 
-# Set seed to ensure repetability of random PsA draws
+# Set seed to ensure repetability of algorithm optimization
 set.seed(158340)
 
-source("./functions/progcombine.R")
+# source("./functions/progcombine.R")
 
 k <- 1 # Index to keep track of number of iterations when not parallelized, and run on limited nb of units
 for (i in index_model_to_compute) { # Unparallelized version
@@ -161,12 +161,12 @@ for (i in index_model_to_compute) { # Unparallelized version
     cat(paste0("\n", Sys.time(),"------ Formating input data for ", unit, " = Unit N°",k,"/",length(index_model_to_compute)," ------\n")) 
     
     formated.input.data <- BIOMOD_FormatingData(resp.var = unit.points.PsA,    # Spatial object with occurrences and PsA
-                                                expl.var = unit.env,            # Env stack
+                                                expl.var = unit.env,           # Env stack
                                                 resp.name = unit,              # Unit/OMU name
                                                 PA.nb.rep = ncol(PA.table),    # Nb of PsA sets
                                                 PA.nb.absences = sum(unit.points.PsA@data, na.rm = T), # Nb of occurrences = Nb of PsA per set
                                                 PA.strategy = "user.defined",  # To allow to provide a custom PA_table
-                                                PA.table = PA.table)            # Provide the custom PA_table
+                                                PA.table = PA.table)           # Provide the custom PA_table
     
     save(formated.input.data, file = paste0(initial.wd,"/models/",res,"/",unit,"/formated.input.data.RData"))
     saveRDS(formated.input.data, file = paste0(initial.wd,"/models/",res,"/",unit,"/formated.input.data.rds"))
@@ -249,7 +249,7 @@ for (i in index_model_to_compute) { # Unparallelized version
     # Models_success <- length(get_built_models(model.runs)) # Save nb of converging models
     
     
-    # Project everything, but do not do the Ensemble. We need to compute Jaccard and select proper models that pass our evaluatio check prior to do the Ensembel manually (also allow to compute sd)
+    # Project everything, but do not do the Ensemble. We need to compute Jaccard and select proper models that pass our evaluation check prior to do the Ensemble manually (also allow to compute sd)
     
     
     if (!(length(get_built_models(model.runs)) > 0)) { # Stop process if no model has converged
@@ -286,16 +286,16 @@ for (i in index_model_to_compute) { # Unparallelized version
       
       cat(paste0("\n", Sys.time()," ------ Projection of all models for ", unit, " = Unit N°",k,"/",length(index_model_to_compute)," ------\n"))
       
-      # Projection of each "model" = RUN * PA * Algo
+      # Projection of each "submodel" = RUN * PA * Algo
       projection.runs <- BIOMOD_Projection(modeling.output = model.runs, # Output of BIOMOD_Modeling
                                            new.env = stack(envData), # Environnmental stack to use for the projection
                                            proj.name = "Current", # Name of the projection based on name of the climatic model
-                                           selected.models = 'all', # Use all models
-                                           binary.meth = NULL, # No thresholding for binary maps. We will do it outide of Biomod2
+                                           selected.models = 'all', # Use all submodels
+                                           binary.meth = NULL, # No thresholding for binary maps. We will do it outside of Biomod2
                                            omit.na = T, # Do not predict pixel with incomplete env data
                                            on_0_1000 = T, # Predictions store on 0 to 1000 scale for LOT OF memory saving
                                            compress = TRUE, # Compress output files
-                                           build.clamping.mask = TRUE, # To build a mask showing which predictions are made out of the environmentalrange out of the data used for calibraiton => i.e., show the area of extrapolation
+                                           build.clamping.mask = TRUE, # To build a mask showing which predictions are made out of the environmental range out of the data used for calibration => i.e., show the area of extrapolation
                                            output.format = ".RData", # Chose projection output format to save on the HD. Save under .grd quick for vizualisation in Explorer, and QGIS compatibility
                                            do.stack = T, # Store all projected layers (one per model) into a single stack rather than separated
                                            keep.in.memory = F) # To keep only the link to the hard-drive copy of the layer in the output object rather than all the projections
@@ -448,3 +448,5 @@ saveRDS(list.models, file = paste0(initial.wd,"/models/",res,"/0_List.models_out
 # 
 # plot(Clamping_mask)
 # points(unit.points, pch = 16)
+#
+######

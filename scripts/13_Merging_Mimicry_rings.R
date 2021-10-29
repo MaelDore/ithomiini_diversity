@@ -3,16 +3,16 @@
 
 # Create map at mimicry ring level by computing "probability" of presence of any of the OMU of each mimicry ring
 
-# Generate a continous map for each 4 options between Jaccard/TSS and Buffer.80/95
+# Generate a continuous map for each 4 options between Jaccard/TSS and Buffer.80/95
 
 
 ##### 
 
 # Inputs:
-   # Stack of continous EM and binary maps for each OMU, per mimicry ring from script 11
+   # Stack of continuous EM and binary maps for each OMU, per mimicry ring from script 11
 
 # Outputs:
-   # Mimicry ring probability continous map for each 4 option between Jaccard/TSS and Buffer.80/95 => aggregated with aggreg_proba function
+   # Mimicry ring probability continuous map for each 4 option between Jaccard/TSS and Buffer.80/95 => aggregated with aggreg_proba function
    # Multiple pages PDF with all mimicry ring probability maps
    # Mimicry ring richness map for each 4 option between Jaccard/TSS and Buffer.80/95 => aggregated with sum
    # Multiple pages PDF with all mimicry ring richness maps
@@ -245,3 +245,7 @@ par(mfrow = c(1, 1))
 dev.off()
 
 
+
+#### Copy-paste the section to compute stack of mimicry rings maps in Script 14a, Sections 5.1 & 6.1
+
+# More logical to compute this here

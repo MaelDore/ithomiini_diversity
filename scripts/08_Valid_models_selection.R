@@ -18,7 +18,7 @@
 
 # Outputs:
    # Evaluation metric thresholds for Jaccard & TSS to discard submodel from ensemble, for complete and restricted models
-   # Histogram of nb of valid submodels per OMU depedning on the threshold chosen
+   # Histogram of nb of valid submodels per OMU depending on the threshold chosen
    # List of valid submodels for each OMU
 
 #####

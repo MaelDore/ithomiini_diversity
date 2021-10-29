@@ -55,6 +55,8 @@ load(file = "./input_data/Map_stuff/country_borders.RData")
 country_borders <- as(country_borders, "Spatial")
 plot(country_borders)
 
+bioregions_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/bioregions_shp_15min.rds")
+
 # Load stuff for plot on Andes
 Andes_ext <- extent(c(-90, -59, -15, 14))
 Close_Andes_ext <- extent(c(-90, -67.2, -18, 14))
@@ -68,7 +70,7 @@ Andes_bbox@proj4string@projargs <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_
 
 saveRDS(Andes_bbox, file = "./input_data/Map_stuff/Andes_bbox.rds", version = "2")
 
-# Load bioregions simplifiedshp
+# Load bioregions simplified shp
 Central_America_shp2 <- readRDS(file = "./input_data/Map_stuff/Bioregions/Central_America_shp2.rds")
 East_Ecuador_shp2 <- readRDS(file = "./input_data/Map_stuff/Bioregions/East_Ecuador_shp2.rds")
 Peruvian_shp2 <- readRDS(file = "./input_data/Map_stuff/Bioregions/Peruvian_shp2.rds")
@@ -204,6 +206,7 @@ Mollweide_shp_projection(Peruvian_shp2)
 Mollweide_shp_projection(Mata_Atlantica_shp5)
 
 Mollweide_shp_projection(country_borders)
+Mollweide_shp_projection(bioregions_shp)
 
 ### 4/ Plot final figure ####
 
@@ -260,6 +263,7 @@ Mollweide_shp_projection(country_borders)
   plot(grid_Mollweide_out, lty = 92, col = "grey80", add = T)
   plot(bbox_sp_Mollweide, lwd = 2, border = "black", col = NA, add = T)
   plot(country_borders_Mollweide, lwd = 1, border = "#00000030", col = NA, add = T)
+  # plot(bioregions_shp_Mollweide, lwd = 1, border = "#00000030", col = NA, add = T)
   
   # Add scale bar in legend
   scalebar(d = 2000, type = "line", lwd = 4, divs = 4, xy = scale_bar_position, label = c("", "2000 km", ""), adj = c(0.5, -0.8), font = 2, cex = 1.2)

@@ -133,7 +133,7 @@ for (i in seq_along(list_genera$Genus))
 }
 
 ## 3.2/ Find the MRCA nod for each of the 10 sub-tribe ####
-Ithomiini_taxonomy_with_subtribes <- xlsx::read.xlsx("./input_data/Ithomiini_taxonomy_with_subtribes.xlsx", sheetIndex = 1)
+Ithomiini_taxonomy_with_subtribes <- xlsx::read.xlsx("./input_data/Databases/Ithomiini_taxonomy_with_subtribes.xlsx", sheetIndex = 1)
 Ithomiini_taxonomy_with_subtribes$sp_full <- paste(Ithomiini_taxonomy_with_subtribes$Genus, Ithomiini_taxonomy_with_subtribes$Species, sep = ".")
 
 list.sp$Subtribe[match(Ithomiini_taxonomy_with_subtribes$sp_full, list.sp$sp_full_new)] <- as.character(Ithomiini_taxonomy_with_subtribes$Subtribe)

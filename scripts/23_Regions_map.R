@@ -376,7 +376,11 @@ Lower_Amazon_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Lower_Amaz
 Pantanal_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Pantanal_shp.rds")
 Pampas_shp <- readRDS(file = "./input_data/Map_stuff/Bioregions/Pampas_shp.rds")
 
-load(file = "./input_data/Map_stuff/country_borders.RData") # Load country borders
+# Save in a single file
+save(Guyana_Shield_shp, Caatinga_shp, Cerrado_shp, Mata_Atlantica_shp5, full_CA_shp, Northern_Andes_shp, Central_Andes_shp, Western_Lowlands_shp, Coastal_desert_shp, Chacos_shp, Llanos_shp, Caribbean_Islands_shp, Western_Amazon_shp, Lower_Amazon_shp, Pantanal_shp, Pampas_shp, file = "./input_data/Map_stuff/Bioregions/All_bioregions_in_figure.RData")
+
+# Load country borders
+load(file = "./input_data/Map_stuff/country_borders.RData") 
 
 # Plot map
 

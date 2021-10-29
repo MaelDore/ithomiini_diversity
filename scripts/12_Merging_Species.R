@@ -14,11 +14,12 @@
 # Outputs:
    # Species continuous map for each 4 option between Jaccard/TSS and Buffer.80/95
    # Summary of composition of species stack: with/without rasterized OMU, only rasterized OMU
+   # Stack of all OMU continuous maps
 
 #####
 
 
-### Prepare stuff
+### 1/ Prepare stuff ####
 
 # Effacer l'environnement
 rm(list = ls())
@@ -52,7 +53,7 @@ aggreg_prob = function(x, na.rm) {
 list.sp$one.Binaries <- F # To record which species include at least one binaries maps
 list.sp$all.Binaries <- F # To record which species include only binaries maps
 
-### Loop by species
+### 2/ Loop by species to build species maps ####
 for (i in 1:nrow(list.sp)) 
 {
   # i <- 23
@@ -171,6 +172,13 @@ for (i in 1:nrow(list.sp))
   
   plot(sp.cont_TSS.95)
   
+  # Make sure to save the data, not just the link to the temp file!
+  sp.cont_Jaccard.80 <- readAll(sp.cont_Jaccard.80)
+  sp.cont_Jaccard.95 <- readAll(sp.cont_Jaccard.95)
+  sp.cont_TSS.80 <- readAll(sp.cont_TSS.80)
+  sp.cont_TSS.95 <- readAll(sp.cont_TSS.95)
+  
+  
   save(sp.cont_Jaccard.80, file = paste0("./outputs/By_species/",sp,"/cont_Jaccard.80_",sp,".RData"), version = "2")
   saveRDS(sp.cont_Jaccard.80, file = paste0("./outputs/By_species/",sp,"/cont_Jaccard.80_",sp,".rds"), version = "2")
   save(sp.cont_Jaccard.95, file = paste0("./outputs/By_species/",sp,"/cont_Jaccard.95_",sp,".RData"), version = "2")
@@ -196,7 +204,7 @@ for (i in 1:nrow(list.sp))
   plot(sp.cont_TSS.95, main = sp)
   dev.off()
   
-  print(i)
+  cat(paste0("\n", Sys.time()," ------ Done for ", sp, " = Species N°",i,"/",nrow(list.sp)," ------\n"))
   
 }
 
@@ -206,7 +214,7 @@ sum(list.sp$one.Binaries) # 170 species among the 388 have at least one binary m
 sum(list.sp$all.Binaries) # 63 species among the 388 are just modeled under binary maps
 
 
-##### Generate stack of all OMUs outputs for all options
+##### 3/ Generate stack of all OMUs outputs for all options ####
 
 
 # Load a random layer to initiate the stacks (to remove later)
@@ -281,5 +289,11 @@ saveRDS(All_OMU_stack_TSS.80, file = paste0("./outputs/Indices_stacks/All_OMU_st
 save(All_OMU_stack_TSS.95, file = paste0("./outputs/Indices_stacks/All_OMU_stack_TSS.95.RData"), version = "2")
 saveRDS(All_OMU_stack_TSS.95, file = paste0("./outputs/Indices_stacks/All_OMU_stack_TSS.95.rds"), version = "2")  
 
-  
+
+
+#### Copy-paste the section to compute stack of species maps in Script 14a, Section 1.1
+
+# More logical to compute this here
+
+
 

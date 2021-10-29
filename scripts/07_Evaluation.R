@@ -45,7 +45,7 @@ res <- "15"
 load(file = paste0("./input_data/list.models.RData"))
 modeled_OMU <- list.models[!is.na(list.models$Model_ID), ]
 
-# Extact one OMU of each modeling type to encompass the two types of modeling structure
+# Extract one OMU of each modeling type to encompass the two types of modeling structure
 unit_complete <- as.character(modeled_OMU$Tag.model[which.max(modeled_OMU$initial_model_type == "complete")])
 unit_restricted <- as.character(modeled_OMU$Tag.model[which.max(modeled_OMU$initial_model_type == "restricted")])
 

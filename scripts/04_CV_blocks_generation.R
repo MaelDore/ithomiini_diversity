@@ -54,15 +54,15 @@ res <- "15"
 # Load environmental stack
 envData <- readRDS(file = paste0("./input_data/Env_data/Select_env_", res, ".rds"))
 
-# Set seed to ensure repetability of random PsA draws
-set.seed(158340)
+# Set seed to ensure repeatability of random PsA draws
+set.seed(1383)
 
 # Choose the number of CV folds to separate the occurrences and PsA in between
 nb.of.folds = 3
 
 source("./functions/progcombine.R")
 
-set.seed(1383)
+
 
 ##### 3/ Loop to generate cross validation blocks  ######
 

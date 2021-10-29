@@ -14,7 +14,7 @@
     # Model results from Script 05.1
 
 # Outputs
-    # Plot for response curve per variable, per model (i.e., OMU*algo*PA*RUN)
+    # Plot for response curve per variable, per submodel (i.e., OMU*algo*PA*RUN)
     # Multiples pages PDF with all plots for a single model
     # Ensemble plot of response curves for all model of each OMU
     # Save evaluation infos (including warnings) in a summary table: Response_plot_summary_table
@@ -398,7 +398,7 @@ for (i in index_model_to_compute) {
       # Detect multimodal distribution if p.value < 0.05. But too sensitive so we set the warning for p < 0.01
       multimod <- diptest::dip.test(x =  Predicts)$p.value < 0.01
       
-      # Warning only if quatratic issue with positive quadratic fit, or no quadratic fit or trend but multimodal
+      # Warning only if quadratic issue with positive quadratic fit, or no quadratic fit or trend but multimodal
       warning <- quad_issue | ((p_value_x2 >= 0.05) & multimod & !trend)
       
       ### Plot
