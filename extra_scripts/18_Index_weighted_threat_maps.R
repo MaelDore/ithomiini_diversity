@@ -27,6 +27,7 @@
    # Threat map: HII (HF, Venter et al., 2016)
 
 # Outputs:
+   # Pretty HF map for SM (Fig. S6.13)
    # Weighted maps of threat for each indice, normalized version
    # Maps of indices, weighted by threats
 

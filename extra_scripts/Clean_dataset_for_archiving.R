@@ -1,15 +1,25 @@
+
+# Clean environment
+rm(list = ls())
+
 ##### Generate a clean dataset for Zenodo archiving ######
 
 library(tidyverse)
+library(xlsx)
 
-load(file = "./input_data/Ithomiini_final.RData")
+load(file = "./input_data/Databases/Ithomiini_final.RData")
 
 # Extract list of curators for acknowledgments
 table(Ithomiini_final$FirstOfregistro_contacto)[order(table(Ithomiini_final$FirstOfregistro_contacto), decreasing = T)]
 
-### Remove useless columns
+### Remove useless columns and keep only raster centroids as coordinates
 Ithomiini_Zenodo_archive <- Ithomiini_final %>% 
   select(ID_obs, Genus, Species, Sub.species, "Latitude" = Latitude_raster, "Longitude" = Longitude_raster, M.mimicry, F.mimicry, country, Country)
+
+### Remove useless columns and keep real coordinates !
+Ithomiini_Zenodo_archive <- Ithomiini_final %>% 
+  select(ID_obs, Genus, Species, Sub.species, Latitude, Longitude, M.mimicry, F.mimicry, country, Country)
+
 
 ### Clean the country variable
 
@@ -69,7 +79,7 @@ Ithomiini_Zenodo_archive$Longitude <- round(Ithomiini_Zenodo_archive$Longitude, 
 
 ### Update taxonomy
 
-taxonomy_update <- xlsx::read.xlsx(file = "./input_data/Taxonomy_update_2021.xlsx", sheetIndex = 1, stringsAsFactors = F)
+taxonomy_update <- xlsx::read.xlsx(file = "./input_data/Databases/Taxonomy_update_2021.xlsx", sheetIndex = 1, stringsAsFactors = F)
 
 Ithomiini_Zenodo_archive[, c("Genus", "Species", "Sub.species")] <- apply(X = Ithomiini_Zenodo_archive[, c("Genus", "Species", "Sub.species")], MARGIN = 2, FUN = as.character)
 
@@ -99,7 +109,7 @@ Ithomiini_Zenodo_archive$Genus <- as.factor(Ithomiini_Zenodo_archive$Genus)
 Ithomiini_Zenodo_archive$Species <- as.factor(Ithomiini_Zenodo_archive$Species)
 Ithomiini_Zenodo_archive$Sub.species <- as.factor(Ithomiini_Zenodo_archive$Sub.species)
 
-# Update species name in the list.sp file
+### Update species name in the list.sp file
 load(file = paste0("./input_data/list.sp.RData"))
 
 list.sp$Updated_name <- F
@@ -121,7 +131,18 @@ list.sp$Species_new <- as.factor(list.sp$Species_new)
 
 # save(list.sp, file = paste0("./input_data/list.sp.RData"))
 
-# Update species name in the phylogeny
+### Save taxonomic list for species
+
+# load(file = paste0("./input_data/list.sp.RData"))
+# 
+# Ithomiini_species_list <- list.sp[, c("Genus_new", "Species_new")]
+# names(Ithomiini_species_list) <-  c("Genus", "Species")
+# write.xlsx(Ithomiini_species_list, file = "./input_data/Databases/Ithomiini_species_list.xlsx",
+#            sheetName = "Ithomiini taxonomic list", append = FALSE, row.names = FALSE)
+# library(xlsx)
+
+
+### Update species name in the phylogeny
 phylo.Ithomiini <- readRDS(file = "./input_data/Phylogenies/Final_phylogeny.rds")
 
 replacement_indices <- match(list.sp$Sp_full[list.sp$Updated_name], phylo.Ithomiini$tip.label)
@@ -137,14 +158,21 @@ phylo.Ithomiini$tip.label[replacement_indices] <- replacement_names
 # saveRDS(phylo.Ithomiini, file = "./input_data/Phylogenies/Final_phylogeny_with_updated_names.rds")
 
 
-### Save with subspecies
+### Save with subspecies and real coordinates !
 library("xlsx")
-write.xlsx(Ithomiini_Zenodo_archive, file = "./input_data/Ithomiini_records_with_ssp.xlsx",
+write.xlsx(Ithomiini_Zenodo_archive, file = "./input_data/Databases/Ithomiini_records_with_ssp_and_true_coordinates.xlsx",
            sheetName = "Ithomiini records", append = FALSE, row.names = FALSE)
-write.csv2(Ithomiini_Zenodo_archive, file = "./input_data/Ithomiini_records_with_ssp.csv", row.names = FALSE)
-saveRDS(Ithomiini_Zenodo_archive, file = "./input_data/Ithomiini_records_with_ssp.rds")
+write.csv2(Ithomiini_Zenodo_archive, file = "./input_data/Databases/Ithomiini_records_with_ssp_and_true_coordinates.csv", row.names = FALSE)
+saveRDS(Ithomiini_Zenodo_archive, file = "./input_data/Databases/Ithomiini_records_with_ssp_and_true_coordinates.rds")
 
-# Ithomiini_Zenodo_archive <- readRDS(file = "./input_data/Ithomiini_records_with_ssp.rds")
+### Save with subspecies but degraded coordinates to raster resolution
+library("xlsx")
+write.xlsx(Ithomiini_Zenodo_archive, file = "./input_data/Databases/Ithomiini_records_with_ssp.xlsx",
+           sheetName = "Ithomiini records", append = FALSE, row.names = FALSE)
+write.csv2(Ithomiini_Zenodo_archive, file = "./input_data/Databases/Ithomiini_records_with_ssp.csv", row.names = FALSE)
+saveRDS(Ithomiini_Zenodo_archive, file = "./input_data/Databases/Ithomiini_records_with_ssp.rds")
+
+# Ithomiini_Zenodo_archive <- readRDS(file = "./input_data/Databases/Ithomiini_records_with_ssp.rds")
 
 # Remove duplicates ?
 # duplicated(x = select(Ithomiini_Zenodo_archive, -"ID_obs"))
@@ -156,10 +184,10 @@ Ithomiini_Zenodo_archive <- select(Ithomiini_Zenodo_archive, -"Sub.species")
 
 ### Save without subspecies
 library("xlsx")
-write.xlsx(Ithomiini_Zenodo_archive, file = "./input_data/Ithomiini_records.xlsx",
+write.xlsx(Ithomiini_Zenodo_archive, file = "./input_data/Databases/Ithomiini_records.xlsx",
            sheetName = "Ithomiini records", append = FALSE, row.names = FALSE)
-write.csv2(Ithomiini_Zenodo_archive, file = "./input_data/Ithomiini_records.csv", row.names = FALSE)
-saveRDS(Ithomiini_Zenodo_archive, file = "./input_data/Ithomiini_records.rds")
+write.csv2(Ithomiini_Zenodo_archive, file = "./input_data/Databases/Ithomiini_records.csv", row.names = FALSE)
+saveRDS(Ithomiini_Zenodo_archive, file = "./input_data/Databases/Ithomiini_records.rds")
 
 # Remove duplicates ?
 # duplicated(x = select(Ithomiini_Zenodo_archive, -"ID_obs"))
@@ -167,15 +195,25 @@ saveRDS(Ithomiini_Zenodo_archive, file = "./input_data/Ithomiini_records.rds")
 
 ### Save without subspecies and duplicates
 library("xlsx")
-write.xlsx(Ithomiini_Zenodo_archive_no_duplicates, file = "./input_data/Ithomiini_records_no_duplicates.xlsx",
+write.xlsx(Ithomiini_Zenodo_archive_no_duplicates, file = "./input_data/Databases/Ithomiini_records_no_duplicates.xlsx",
            sheetName = "Ithomiini records", append = FALSE, row.names = FALSE)
-write.csv2(Ithomiini_Zenodo_archive_no_duplicates, file = "./input_data/Ithomiini_records_no_duplicates.csv", row.names = FALSE)
-saveRDS(Ithomiini_Zenodo_archive_no_duplicates, file = "./input_data/Ithomiini_records_no_duplicates.rds")
+write.csv2(Ithomiini_Zenodo_archive_no_duplicates, file = "./input_data/Databases/Ithomiini_records_no_duplicates.csv", row.names = FALSE)
+saveRDS(Ithomiini_Zenodo_archive_no_duplicates, file = "./input_data/Databases/Ithomiini_records_no_duplicates.rds")
 
 
 
 
-### Export current taxonomy
+### Export current taxonomy per species ####
+
+# With ssp
+Ithomiini_Zenodo_archive <- readRDS(file = "./input_data/Databases/Ithomiini_records_with_ssp.rds")
+
+# Without ssp
+Ithomiini_Zenodo_archive <- readRDS(file = "./input_data/Databases/Ithomiini_records.rds")
+
+# Without ssp and duplicates
+Ithomiini_Zenodo_archive <- readRDS(file = "./input_data/Databases/Ithomiini_records_no_duplicates.rds")
+
 
 # Generate final table
 Species_list <- as_tibble(unique(Ithomiini_Zenodo_archive[, c("Genus", "Species")]))
@@ -196,14 +234,47 @@ for(i in 1: nrow(Species_list))
 }
 
 # Save
-write.xlsx(Species_list, file = "./input_data/Ithomiini_taxonomy.xlsx",
+library("xlsx")
+write.xlsx(Species_list, file = "./input_data/Databases/Ithomiini_taxonomy.xlsx",
            sheetName = "Ithomiini taxonomy", append = FALSE, row.names = FALSE, showNA = FALSE)
-write.csv2(Species_list, file = "./input_data/Ithomiini_taxonomy.csv", row.names = FALSE, na = "")
-saveRDS(Species_list, file = "./input_data/Ithomiini_taxonomy.rds")
+write.csv2(Species_list, file = "./input_data/Databases/Ithomiini_taxonomy.csv", row.names = FALSE, na = "")
+saveRDS(Species_list, file = "./input_data/Databases/Ithomiini_taxonomy.rds")
        
 
-load(file = "./input_data/list.models.RData")
+Species_list <- readRDS(file = "./input_data/Databases/Ithomiini_taxonomy.rds")
 
-table(list.models$Mimicry.model)[order(table(list.models$Mimicry.model), decreasing = T)]
 
-list.models$Sp_full[list.models$Mimicry.model == "ILLINISSA"]
+### Export current taxonomy per subspecies ####
+
+# With ssp
+Ithomiini_Zenodo_archive <- readRDS(file = "./input_data/Databases/Ithomiini_records_with_ssp.rds")
+
+
+# Generate final table for Subspecies taxonomy and ring membership
+SubSpecies_list <- as_tibble(unique(Ithomiini_Zenodo_archive[, c("Genus", "Species", "Sub.species", "M.mimicry", "F.mimicry")]))
+
+# Check for sexual dimorphism
+SubSpecies_list$Sexual_Dimorphism <- F
+for(i in 1: nrow(SubSpecies_list))
+{
+  SubSpecies_list$Sexual_Dimorphism <- !(SubSpecies_list$M.mimicry == SubSpecies_list$F.mimicry)
+}
+
+# Add subtribe
+load("D:/Mael/R_projects/ithomiini_diversity/input_data/list.sp.RData")
+Genera_taxo <- unique(list.sp[, c("Genus_new", "Subtribe")])
+SubSpecies_list <- left_join(x = SubSpecies_list, y = Genera_taxo, by = c("Genus" = "Genus_new"))
+
+# Save
+library("xlsx")
+write.xlsx(as.data.frame(SubSpecies_list), file = "./input_data/Databases/Ithomiini_subspecies_taxonomy.xlsx",
+           sheetName = "Ithomiini Subspecies taxonomy", append = FALSE, row.names = FALSE, showNA = FALSE)
+write.csv2(SubSpecies_list, file = "./input_data/Databases/Ithomiini_subspecies_taxonomy.csv", row.names = FALSE, na = "")
+saveRDS(SubSpecies_list, file = "./input_data/Databases/Ithomiini_subspecies_taxonomy.rds")
+
+# Need additional curating since data from Jim and Andre may not match the one of Keith
+# Be careful, since some subspecies were deleted, ID are not the same than in the non-curated file !
+Ithomiini_mimicry_classification_curated <- read_excel("input_data/Databases/Ithomiini_mimicry_classification_curated.xlsx", 
+                                                       sheet = "Ithomiini Subspecies Taxonomy")
+saveRDS(Ithomiini_mimicry_classification_curated, file = "./input_data/Databases/Ithomiini_subspecies_taxonomy.rds")
+

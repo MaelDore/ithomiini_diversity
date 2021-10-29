@@ -283,3 +283,73 @@ pairs(stack(DEM_masked, sp.richness_masked))
 pairs(stack(DEM_masked, sp.rarity_masked))
 pairs(stack(DEM_masked, MPD_masked))
 pairs(stack(DEM_masked, ring.richness_masked))
+
+
+### Boxplot elevation per ring
+
+library(raster)
+
+elevation <- readRDS(file = "./input_data/Env_data/Select_env_15.rds")[[5]]
+ring_richness_brick <- brick(readRDS(file = "./outputs/Indices_stacks/All_ring_rich_stack_Jaccard.80.RData"))
+
+elevation_data <- elevation@data@values
+ring_richness_data <- ring_richness_brick@data@values
+
+### Only weighted mean, no variance
+
+weighted_mean_elevation_per_ring <- c()
+for(i in 1:ncol(ring_richness_data))
+{
+  weighted_mean_elevation_per_ring[i] <- weighted.mean(x = elevation_data, w = ring_richness_data[, i], na.rm = T)
+}
+names(weighted_mean_elevation_per_ring) <- names(ring_richness_brick)
+
+weighted_mean_elevation_per_ring_df <- data.frame("Elevation" = weighted_mean_elevation_per_ring, "Mimicry" = as.factor(names(ring_richness_brick)))
+weighted_mean_elevation_per_ring_df <- weighted_mean_elevation_per_ring_df[order(weighted_mean_elevation_per_ring),]
+weighted_mean_elevation_per_ring_df$Mimicry <- factor(x = weighted_mean_elevation_per_ring_df$Mimicry, levels = weighted_mean_elevation_per_ring_df$Mimicry)
+
+boxplot(formula = Elevation ~ Mimicry, data = weighted_mean_elevation_per_ring_df)
+
+View(weighted_mean_elevation_per_ring_df)
+
+saveRDS(object = weighted_mean_elevation_per_ring_df, file = "./outputs/Env_profile/weighted_mean_elevation_per_ring_df.rds")
+weighted_mean_elevation_per_ring_df <- readRDS(file = "./outputs/Env_profile/weighted_mean_elevation_per_ring_df.rds")
+
+
+
+### Boxplot with variance but binarization and no weighting
+
+# Extract elevation data only for richness > threshold
+
+threshold <-  0.5
+threshold <- 0.8
+
+ring_richness_data_bin <- ring_richness_data > threshold
+
+elevation_data_per_ring <- mimicry_data_per_ring <- elevation_data_per_ring_new <- mimicry_data_per_ring_new <- c()
+for (i in 1:ncol(ring_richness_data))
+{
+  # i <- 1
+  
+  ring <- names(ring_richness_brick)[i]
+  elevation_data_per_ring_new <- elevation_data[(ring_richness_data_bin[,i]) & !is.na(ring_richness_data_bin[,i])]
+  mimicry_data_per_ring_new <- rep(x = ring, times = length(elevation_data_per_ring_new))
+    
+  elevation_data_per_ring <- c(elevation_data_per_ring, elevation_data_per_ring_new)  
+  mimicry_data_per_ring <- c(mimicry_data_per_ring, mimicry_data_per_ring_new) 
+}
+elevation_per_ring_df <- data.frame("Elevation" = elevation_data_per_ring, "Mimicry" = as.factor(mimicry_data_per_ring))
+
+median_elevation_per_ring <- as.numeric(by(data = elevation_data_per_ring, INDICES = as.factor(mimicry_data_per_ring), FUN = median))
+names(median_elevation_per_ring) <- levels(as.factor(mimicry_data_per_ring))
+
+median_elevation_per_ring_ordered <- median_elevation_per_ring[order(median_elevation_per_ring)]
+View(median_elevation_per_ring_ordered)
+
+elevation_per_ring_df$Mimicry <- factor(x = elevation_per_ring_df$Mimicry, levels = names(median_elevation_per_ring)[order(median_elevation_per_ring)])
+
+boxplot(formula = Elevation ~ Mimicry, data = elevation_per_ring_df)
+
+saveRDS(object = median_elevation_per_ring_ordered, file = "./outputs/Env_profile/median_elevation_per_ring_ordered.rds")
+saveRDS(object = elevation_per_ring_df, file = "./outputs/Env_profile/elevation_per_ring_df.rds")
+
