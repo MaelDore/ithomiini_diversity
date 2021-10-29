@@ -1,0 +1,45 @@
+Mimicry ring	Genus	Species	Subspecies	Author(s)
+ACRISIONE	Athesis	acrisione	acrisione	Hewitson, 1869
+AGNOSIA	Ithomia	agnosia	agnosia	Hewitson, [1855]
+AMALDA	Oleria	amalda	amalda	(Hewitson, [1857])
+AURELIANA	Hypoleria	aureliana		(H. Bates, 1862)
+BANJANA-M	Oleria	athalina	banjana	(Haensch, 1903)
+CONFUSA	Methona	confusa	confusa	A. Butler, 1873
+DERCYLLIDAS	Patricia	dercyllidas	dercyllidas	(Hewitson, 1864)
+DILUCIDA	Eutresis	dilucida		Staudinger, 1885
+DOTO	Episcada	doto	doto	(Hübner, [1806])
+DUESSA	Napeogenes	duessa	duessa	(Hewitson, [1859])
+DUILLIA	Godyris	duillia		(Hewitson, 1854)
+EGRA	Oleria	aegle	egra	(Hewitson, [1852])
+EURIMEDIA	Aeria	eurimedia	eurimedia	(Cramer, 1777)
+EXCELSA	Hyalyris	excelsa	excelsa	(C. Felder & R. Felder, 1862)
+HEMIXANTHE	Episcada	hemixanthe		(C. Felder & R. Felder, 1865)
+HERMIAS	Tithorea	harmonia	hermias	Godman & Salvin, 1898
+HEWITSONI	Godyris	hewitsoni	hewitsoni	(Haensch, 1903)
+HUMBOLDT	Elzunia	humboldt	humboldt	(Latreille, [1809])
+ILLINISSA	Hyposcada	illinissa	illinissa	(Hewitson, [1852])
+LERIDA	Oleria	ilerdina	lerida	(W. F. Kirby, 1878)
+LIBETHRIS	Hypomenitis	libethris	libethris	(C. Felder & R. Felder, 1865)
+LYSIMNIA	Mechanitis	lysimnia	lysimnia	(Fabricius, 1793)
+MAELUS	Melinaea	satevis	maelus	(Hewitson, 1860)
+MAMERCUS	Hypothyris	mamercus	mamercus	(Hewitson, 1869)
+MANTINEUS	Mechanitis	menapis	mantineus	Hewitson, 1869
+MESTRA	Hyalyris	mestra	mestra	(Hopffer, 1874)
+MOTHONE	Melinaea	marsaeus	mothone	(Hewitson, 1860)
+OCNA	Hyalyris	ocna	ocna	(Herrich-Schäffer, 1865)
+ORESTES	Melinaea	menophilus	orestes	Salvin, 1871
+OZIA	Pteronymia	ozia	ozia	(Hewitson, 1870)
+PANTHYALE	Godyris	panthyale	panthyale	(C. Felder & R. Felder, 1862)
+PARALLELIS	Melinaea	lilis	parallelis	A. Butler, 1873
+PAVONII	Elzunia	pavonii		(A. Butler, 1873)
+POLITA	Episcada	polita	polita	Weymer, 1899
+PRAESTANS	Olyras	insignis	praestans	Godman & Salvin, 1897
+PRAXILLA	Hyalyris	praxilla	praxilla	(Hewitson, 1870)
+QUINTINA	Oleria	quintina		(C. Felder & R. Felder, 1865)
+SINILIA	Hyposcada	illinissa	sinilia	(Herrich-Schäffer, 1865)
+SUSIANA	Megoleria	susiana	susiana	(C. Felder & R. Felder, 1862)
+THABENA-F	Pteronymia	thabena	thabena	(Hewitson, 1869)
+THEUDELINDA	Hypomenitis	theudelinda	theudelinda	(Hewitson, [1861]
+TICIDA-M	Pteronymia	ticida	ticida	(Hewitson, 1869)
+UMBROSA	Hypomenitis	depauperata	umbrosa	(Haensch, 1903)
+VESTILLA	Pteronymia	vestilla	vestilla	(Hewitson, [1853])
