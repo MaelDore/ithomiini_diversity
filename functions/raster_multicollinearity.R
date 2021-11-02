@@ -1,3 +1,6 @@
+# Compute automatically the correlation between raster layers by subsampling data points
+# Can also provide list of group of variables based on a defined threshold
+
 raster_multicollinearity <- function (raster.stack, multicollinearity.cutoff = 0.7,
                                             select.variables = FALSE, sample.points = FALSE, nb.points = 10000,
                                             plot = FALSE, method = "pearson") 
