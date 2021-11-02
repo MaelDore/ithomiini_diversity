@@ -21,6 +21,9 @@ renv/*
 *.lnk
 *.zip
 
+# Special folder for data that cannot be disclosed publically
+sensitive_input_data/*
+
 # Les enlever les un après les autres du .gitignore jusqu'à ce que ça marche
 # Restart le Rproj à chaque changement pour qu'ils soient pris en compte et le dossier scannés à la recherche de changements
 
