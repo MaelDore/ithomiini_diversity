@@ -10,6 +10,8 @@ for this research article:
 biodiversity hotspots in a flagship butterfly group** [Link to be
 posted]()
 
+[![DOI](https://zenodo.org/badge/DOI/10.1111/ddi.13455.svg)](https://doi.org/10.1111/ddi.13455).
+
 In this study, we provide new maps of the distribution of the different
 facets of Ithomiini diversity in the entire Neotropics in order to
 identify areas of both evolutionary and ecological importance for
@@ -27,6 +29,13 @@ All content is available
 [here](https://github.com/MaelDore/ithomiini_diversity).
 
 ## Contents
+
+  - [:file\_folder: **extra\_scripts**](extra_scripts/) directory
+    contains supplementary scripts for complementary analyses not
+    included in the article.
+
+  - [:file\_folder:**for\_article**](for_article/) directory contains
+    the final figures from the article.
 
   - [:file\_folder: **functions**](functions/) directory contains
     homemade functions used in the analyses.
@@ -94,8 +103,13 @@ Please cite this research article as:
 
 ## Associated online archives
 
-The dataset used to run the analyses is made publicy available at
+The occurrence dataset used to run the analyses is made publicly
+available at
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4696055.svg)](https://doi.org/10.5281/zenodo.4696055).
+
+The mimicry classification of ithomiine subspecies defined for this
+study is made publicly available at
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.5497876.svg)](https://doi.org/10.5281/zenodo.5497876).
 
 The distribution maps generated throughout the analyses are made
 publicly available at
