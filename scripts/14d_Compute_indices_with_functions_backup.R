@@ -1,0 +1,2635 @@
+
+##### Script 14d: Compute biodiversity indices maps, clean version with functions #####
+
+# Author: Maël Doré
+# Contact: mael.dore@gmail.com
+
+
+##### See my notes in the dedicated "Article" folder for stuff to improve ####
+
+
+##### List of indices computed
+
+# 1/ Species richness
+# 2/ Species Shannon's Diversity
+# 3/ Species Shannon's Diversity with compatibility with species richness: (a) Raw and (b) with Jost's transformation (exponential)
+# 4/ Species Evenness
+
+# 5/ Mimicry richness
+# 6/ Mimicry Shannon's Diversity
+# 7/ Mimicry Shannon's Diversity with compatibility with mimicry richness: (a) Raw and (b) with Jost's transformation (exponential)
+# 8/ Mimicry Evenness
+
+# 9/  Continuous Species Rarity = Range-size Weighted Species Richness. (a) Total and (b) Mean
+# 10/ Categorical Species Rarity (25% threshold) : (a) Total and (b) Proportion
+# 11/ Continuous Mimicry rarity = Range size weighted mimicry richness. (a) Total and (b) Mean
+
+# 12/ Community vulnerability (Ring mean vulnerability). Weighted or not.
+
+### 13/ Phylogeny-based indices
+
+# 14/ Mean pairwise Phylogenetic Distance
+# 15/ Faith's Phylogenetic Diversity
+# 16/ Fair-proportion : (a) Total and (b) Mean
+
+
+# 17/ Ring size: (a) Mean, (b) Weighted Mean, (c) Quantiles
+
+
+
+###
+
+# Inputs:
+# Stack of species 'probability' of presence
+# Phylogeny
+
+# Outputs:
+# Lots of biodiversity index raster
+
+###
+
+
+### 0/ Prepare stuff ####
+
+# Clean environment
+rm(list = ls())
+
+# Load libraries
+library(raster)
+
+# Change temp folder for raster files
+rasterOptions(tmpdir = paste0("./temp"))
+# To clean regularly temp folder
+unlink(list.files(path = rasterOptions()$tmpdir, all.files = T, recursive = T, include.dirs = T, full.names = T), force = T, recursive = T)
+
+
+# Load summary tables with ring membership by species/OMU
+# load(file = paste0("./input_data/list.sp.RData"))
+# load(file = paste0("./input_data/list.models.RData"))
+
+# Create a list of mimicry rings
+# mimicry_list <- as.character(unique(list.models$Mimicry.model)) # 44 Mimicry rings
+
+# Load raster mask for continent borders
+# continent_mask <- readRDS(file = paste0("./input_data/Env_data/continent_mask_15.rds"))
+
+### Functions to manipulate raster data ####
+
+# Contrasting raster function
+contrasting_raster <- function(x, zmin, zmax)
+{
+  # Create raster with null values for terrestrial areas
+  continental_mask <- (calc(x, fun = sum) >= 0) - 1
+  # plot(continental_mask)
+  
+  # Create raster with NA values outside of the species range
+  community_mask_PA <- (calc(proba_stack, fun = sum) > 0) - 1
+  community_mask <- community_mask_PA
+  community_mask[community_mask[] < 0] <- NA
+  # plot(community_mask)
+  
+  x[x[] <= zmin] <- zmin  # Fix low values
+  x[x[] >= zmax] <- zmax  # Fix high values
+  
+  x <- mask(x, mask = community_mask)  # Cut out values that are outside species range
+  
+  y <- continental_mask + zmin  # Create final new raster from continental mask with baseline = zmin
+  y[!is.na(x[])] <- x[!is.na(x[])]  # Add initial raster values
+  
+  return(y)
+}
+
+
+##### 1/ Species richness ####
+
+### Load the complete stack of species SDM outputs
+sp_proba_stack <- readRDS(file = paste0("./outputs/Indices_stacks/All_sp_proba_stack_Jaccard.80.rds"))
+
+### 1.1/ Function to compute species richness
+
+compute_richness <- function(proba_stack)
+{
+  richness <- readAll(calc(proba_stack, fun = sum))
+  return(richness)
+}
+
+source(file = "./functions/compute_richness.R")
+
+### 1.2/ Index computation ####
+
+sp_richness <- compute_richness(sp_proba_stack)
+
+plot(sp_richness)
+
+# Save
+save(sp_richness, file = paste0("./outputs/Indices_maps/sp_richness.RData"))
+
+
+##### 2/ Species Shannon's diversity index #####
+
+### Warning! Based on the assumption than SDM output (probability of presence/habitat suitability) are suitable proxies for species abundance
+
+### Load the stack of species SDM outputs
+sp_proba_stack <- readRDS(file = paste0("./outputs/Indices_stacks/All_sp_proba_stack_Jaccard.80.rds"))
+
+### 2.1/ Function to compute Shannon's diversity index ####
+
+compute_Shannon_diversity <- function(proba_stack)
+{
+  # Function to compute Shannon's diversity index from vector of abundances (or by default, proxies)
+  shannon = function(x, na.rm) {
+    x <- x[x>0] # Remove 0 values to avoid error for log(0)
+    y <- x/sum(x) # Compute frequencies of each OMU
+    h <- -sum(y*log(y)) # Compute Shannon's H'
+    return(h) # Output
+  }
+  
+  Shannon_diversity <- readAll(calc(proba_stack, fun = shannon))
+  return(Shannon_diversity)
+}
+
+source(file = "./functions/compute_Shannon_diversity.R")
+
+### 2.2/ Index computation ####
+
+sp_Shannon_diversity <- compute_Shannon_diversity(sp_proba_stack)
+
+plot(sp_Shannon_diversity)
+
+# Save
+save(sp_Shannon_diversity, file = paste0("./outputs/Indices_maps/sp_Shannon_diversity.RData"))
+
+
+##### 3/ Species Shannon's Diversity with compatibility with species richness #####
+
+### Warning! Based on the assumption that SDM output (probability of presence/habitat suitability) are suitable proxies for species abundance
+
+# Limit number of species/OMU integrated in the computation, corresponding to the local estimated species richness
+# Can use Jost's transformation to make indices comparable. Select a similar number of species/OMU per pixel to avoid getting transformed values higher than actual species richness
+
+
+### Load the complete stack of species SDM outputs
+sp_proba_stack <- readRDS(file = paste0("./outputs/Indices_stacks/All_sp_proba_stack_Jaccard.80.rds"))
+
+### 3.1/ Function to compute Shannon's diversity index with Jost's transformation ####
+
+compute_Shannon_diversity_Jost <- function(proba_stack, transfo = T, na.rm)
+{
+  # Function to compute Shannon's diversity index from vector of abundances (or by default, proxies)
+  shannon_compatible <- function(x, na.rm) 
+  {
+    rich <- sum(x) # Local estimated species richness
+    
+    if (is.na(rich)) 
+    {
+      h <- NA # Case with NA
+    } else {
+      
+      if (round(rich, 0) == 0) 
+      {
+        h <- 0 # Case with no species/OMU. Skip computation to avoid error such as log(0) = Inf
+      } else { # Regular case
+        
+        x <- x[order(x, decreasing = T)] # Order the probabilities by decreasing values
+        x <- head(x, n = round(rich, 0)) # Extract only the N highest probabilities. N = Rounded estimated richness
+        y <- x/sum(x) # Compute frequencies
+        h <- -sum(y*log(y)) # Compute H'
+      }
+    }
+    
+    # Output
+    return(h) 
+  }
+  
+  Shannon_diversity_Jost <- readAll(calc(proba_stack, fun = shannon_compatible))
+  
+  # If Jost transformation is to be applied, use exponential
+  if (transfo)
+  {
+    Shannon_diversity_Jost <- exp(Shannon_diversity_Jost)
+  }
+  
+  return(Shannon_diversity_Jost)
+}
+
+source(file = "./functions/compute_Shannon_diversity.R")
+
+### 3.2/ Index computation ####
+
+sp_Shannon_diversity_Jost <- compute_Shannon_diversity_Jost(sp_proba_stack, transfo = T)
+
+plot(sp_Shannon_diversity_Jost)
+
+# Save
+save(sp_Shannon_diversity_Jost, file = paste0("./outputs/Indices_maps/sp_Shannon_diversity_Jost.RData"))
+
+
+##### 4/ Species Evenness = Pielou's evenness/equitability #####
+
+### Warning! Based on the assumption that SDM output (probability of presence/habitat suitability) are suitable proxies for species abundance
+
+### Load the complete stack of species SDM outputs
+sp_proba_stack <- readRDS(file = paste0("./outputs/Indices_stacks/All_sp_proba_stack_Jaccard.80.rds"))
+
+### 4.1/ Function to compute Pielou's evenness/equitability
+
+compute_Pielou_evenness <- function(proba_stack)
+{
+  # Function to compute Pielou's evenness index from vector of abundances (or by default, proxies)
+  evenness <- function(x, na.rm) 
+  {
+    x <- round(x*1000, digits = 0) # Round values to avoid J > 1
+    
+    if (sum(x, na.rm = T) < 1)  # Cannot be computed when sum of rounded "abundances" < 1
+    { 
+      J <- NA
+    } else {
+      x <- x[x > 0] # Remove all 0 values to avoid error for log(0)
+      y <- x/sum(x) # Compute frequencies
+      H <- -sum(y*log(y)) # Compute H'
+      Hmax <- log(sum(x)) # Compute Hmax
+      J <- round(min(H/Hmax, 1), digits = 3) # Compute J
+    }
+    return(J) # Output
+  }
+  
+  # Compute index raster  
+  Pielou_evenness_temp <- readAll(calc(proba_stack, fun = evenness))
+  
+  # Generate a mask for terrestrial areas
+  continental_mask <- (readAll(calc(proba_stack, fun = sum)) >= 0) - 1
+  
+  # Add null values as background for terrestrial areas
+  Pielou_evenness <- continental_mask
+  Pielou_evenness@data@values[!is.na(Pielou_evenness_temp@data@values)] <- Pielou_evenness_temp@data@values[!is.na(Pielou_evenness_temp@data@values)]
+  
+  # Repair issue with max value
+  Pielou_evenness@data@max <- max(Pielou_evenness[], na.rm = T)
+  
+  return(Pielou_evenness)
+}
+
+source(file = "./functions/compute_Pielou_evenness.R")
+
+### 4.2/ Index computation ####
+
+sp_Pielou_evenness <- compute_Pielou_evenness(sp_proba_stack)
+
+plot(sp_Pielou_evenness)
+
+# Save
+save(sp_Pielou_evenness, file = paste0("./outputs/Indices_maps/sp_Pielou_evenness.RData"))
+
+
+##### 5/ Mimicry richness #####
+
+
+### 5.1/ Mimicry Stacks generation ####
+
+### Generate stack of mimicry probability of presence per ring
+### Generate stack of mimicry richness in species per ring
+
+# Create a list of mimicry rings
+# mimicry_list <- as.character(unique(list.models$Mimicry.model)) # 44 Mimicry rings
+
+# Load the complete stack of species SDM outputs
+sp_proba_stack <- readRDS(file = paste0("./outputs/Indices_stacks/All_sp_proba_stack_Jaccard.80.rds"))
+
+# Load the list of mimicry ring membership per species
+N_rings <- 5
+mimicry_ring_membership <- mimicry_list[(round(runif(n = nlayers(sp_proba_stack), min = 1, max = N_rings), digits = 0))]
+
+# Initiate stacks
+ring_proba_stack <- stack()
+ring_richness_stack <- stack()
+
+# Loop by mimicry ring
+for (i in 1:length(mimicry_list))
+{ 
+  # i <- 1
+  
+  # Load ring name
+  ring <- mimicry_list[i]
+  
+  # Get indices of species for this ring
+  species_indices <- which(mimicry_ring_membership == ring)
+  
+  # Extract species layers to get a stack of only species from this ring
+  sp_prob_stack_per_ring <- readAll(subset(x = sp_proba_stack, subset = species_indices))
+  
+  ### Compute species richness for this ring
+  sp_richness_per_ring <- readAll(calc(sp_prob_stack_per_ring, fun = sum))
+  
+  ### Compute probability of presence for this ring
+  
+  # Function to compute probability of presence of at least one species/OMUs
+  aggreg_prob <- function(x, na.rm) 
+  { 
+    y <- 1 - prod(1 - x) # Probability of presence of ring = probability of presence of at least one species/OMU = opposite of probability of absence of all species/OMU
+    return(y) # Output
+  }
+  
+  proba_per_ring <- readAll(calc(sp_prob_stack_per_ring, fun = aggreg_prob))
+  
+  ### Add layers to the final stack with all rings
+  ring_richness_stack <- addLayer(ring_richness_stack, sp_richness_per_ring)
+  ring_proba_stack <- addLayer(ring_proba_stack, proba_per_ring)
+  
+  # Check run
+  if (i %% 10 == 0) {print(i)}
+}
+
+# Name layers with ring names
+names(ring_richness_stack) <- names(ring_proba_stack) <- mimicry_list[1:N_rings]
+
+# nlayers(ring_richness_stack) # N rings in the final stack
+
+plot(ring_richness_stack)
+plot(ring_proba_stack)
+
+# Save stacks
+save(ring_richness_stack, file = paste0("./outputs/Indices_stacks/ring_richness_stack.RData"))
+saveRDS(ring_richness_stack, file = paste0("./outputs/Indices_stacks/ring_richness_stack.rds"))
+save(ring_proba_stack, file = paste0("./outputs/Indices_stacks/ring_richness_stack.RData"))
+saveRDS(ring_proba_stack, file = paste0("./outputs/Indices_stacks/ring_richness_stack.rds"))
+
+
+### 5.2/ Index computation ####
+
+source(file = "./functions/compute_richness.R")
+
+### Load the ring probability stack
+ring_proba_stack <- readRDS(file = paste0("./outputs/Indices_stacks/ring_proba_stack.rds"))
+
+ring_richness <- compute_richness(ring_proba_stack)
+
+plot(ring_richness)
+
+# Save
+save(ring_richness, file = paste0("./outputs/Indices_maps/ring_richness.RData"))
+
+
+##### 6/ Mimicry Shannon's diversity #####
+
+# Warning! Shannon's diversity index using number of species in each ring as abundances for mimicry rings
+
+### Load the ring probability stack
+ring_proba_stack <- readRDS(file = paste0("./outputs/Indices_stacks/ring_proba_stack.rds"))
+
+### 6.1/ Index computation #####
+
+source(file = "./functions/compute_Shannon_diversity.R")
+
+ring_Shannon_diversity <- compute_Shannon_diversity(ring_proba_stack)
+
+plot(ring_Shannon_diversity)
+
+# Save
+save(ring_Shannon_diversity, file = paste0("./outputs/Indices_maps/ring_Shannon_diversity.RData"))
+
+
+##### 7/ Mimicry Shannon's diversity with compatibility with mimicry richness #####
+
+# Warning! Shannon's diversity index using number of species in each ring as abundances for mimicry rings
+
+# Limit number of rings integrated in the computation, corresponding to the local estimated ring richness
+# Can use Jost's transformation to make indices comparable. Select a similar number of mimicry rings per pixel to avoid getting transformed values higher than actual mimicry ring richness
+
+
+### Load the ring probability stack
+ring_proba_stack <- readRDS(file = paste0("./outputs/Indices_stacks/ring_proba_stack.rds"))
+
+
+### 7.1/ Index computation ####
+
+source(file = "./functions/compute_Shannon_diversity.R")
+
+ring_Shannon_diversity_Jost <- compute_Shannon_diversity_Jost(ring_proba_stack, transfo = T)
+
+plot(ring_Shannon_diversity_Jost)
+
+# Save
+save(ring_Shannon_diversity_Jost, file = paste0("./outputs/Indices_maps/ring_Shannon_diversity_Jost.RData"))
+
+
+
+##### 8/ Mimicry Pielou's Evenness/Equitability #####
+
+# Warning! Pielou's Evenness/Equitability index using number of species in each ring as abundances for mimicry rings
+
+
+### Load the ring probability stack
+ring_proba_stack <- readRDS(file = paste0("./outputs/Indices_stacks/ring_proba_stack.rds"))
+
+
+### 8.1/ Index computation ####
+
+source(file = "./functions/compute_Pielou_evenness.R")
+
+ring_Pielou_evenness <- compute_Pielou_evenness(ring_proba_stack)
+
+plot(ring_Pielou_evenness)
+
+# Save
+save(ring_Pielou_evenness, file = paste0("./outputs/Indices_maps/ring_Pielou_evenness.RData"))
+
+
+##### 9/ Species continuous geographic rarity #####
+
+# If using the weighted sum of species continuous geographic rarity = Range-size weighted species richness
+# If using the weighted mean of species continuous geographic rarity = Geographic rarity standardized by species richness
+
+### Load the stack of species SDM outputs
+sp_proba_stack <- readRDS(file = paste0("./outputs/Indices_stacks/All_sp_proba_stack_Jaccard.80.rds"))
+
+
+### 9.1/ Function to compute geographic rarity from raster stack of SDM continuous outputs ####
+
+# Wrapped-up around functions from the Rarity package (Boris Leroy, 2016))
+# library("Rarity")
+# citation("Rarity")
+# Associated publications: 
+# DOI: 10.1111/j.1752-4598.2011.00148.x
+# DOI: 10.1111/ddi.12040
+
+compute_geographic_rarity <- function(proba_stack)
+{
+  ### Compute geographic ranges
+  prob_mat <- raster::getValues(proba_stack) # Get matrix of probabilities of presence per units/species (columns) per community (rows)
+  pixel_range <- apply(X = prob_mat, MARGIN = 2, FUN = sum, na.rm = T) # Compute expected number of occupied pixels
+  pixel_area <- mean(raster::getValues(raster::area(proba_stack)), nar.rm = T) # Compute the mean area of a pixel in the stack
+  area_range <- pixel_range*pixel_area  # Convert nb of pixels into range in km²
+  
+  ### Compute rarity weights based on geographic ranges and assemblages
+  
+  # Format matrix of assemblages. Rows = units/species). Columns = communities.
+  assemblages <- t(tidyr::drop_na(as.data.frame(prob_mat))) # Clean communities with NA
+  assemblages <- assemblages[, colSums(assemblages) >= 1] # Remove communities with less than one unit/species expected
+  
+  # Compute Rarity weights based on an inverse exponential function with inflection point calibrated as the rarity threshold as such that communities host 25% of rare units/species in average
+  Leroy_weights_df <- Rarity::rWeights(occData = area_range, 
+                                       wMethods = "W", rCutoff = "Leroy",
+                                       normalised = T, rounding = 5,
+                                       assemblages = assemblages)
+  
+  # Format final output
+  geographic_rarity_df <- cbind(row.names(Leroy_weights_df), pixel_range, Leroy_weights_df)
+  geographic_rarity_df <- geographic_rarity_df[, -ncol(geographic_rarity_df)]
+  row.names(geographic_rarity_df) <- 1:nrow(geographic_rarity_df)
+  names(geographic_rarity_df) <- c("Unit", "Range_pixel", "Range_km2", "Rarity_binary", "Rarity_weights")
+  
+  return(geographic_rarity_df)
+}
+
+source(file = "./functions/compute_geographic_rarity.R")
+
+compute_geographic_rarity(proba_stack)
+
+### 9.2/ Function to compute community mean and total geographic rarity from SDM continuous outputs ####
+
+# Choose between "total" and "mean" community geographic rarity with the "index" argument
+# Choose between "continuous" and "binary" with the "type" argument for the type of rarity weights
+
+compute_community_geographic_rarity <- function(proba_stack, index = "mean", weight_type = "continuous")
+{
+  # Compute the geographic rarity weights of units/species
+  geographic_rarity_df <- compute_geographic_rarity(proba_stack)
+  
+  # Choose the type of weights to use
+  if(weight_type == "continuous") # For weights derived from an negative exponential transformation of geographic ranges
+  {
+    rarity_weights <- geographic_rarity_df$Rarity_weights
+  } else {  # Binary weights based on a cut-off
+    rarity_weights <- geographic_rarity_df$Rarity_binary
+  }
+  
+  # Get matrix of probabilities of presence per units/species (columns) per community (rows)
+  proba_mat <- raster::getValues(proba_stack) 
+  
+  # Make a loop per community to compute community geographic rarity
+  all_geographic_rarity <- rep(NA, nrow(proba_mat))
+  for (k in 1:nrow(proba_mat)) 
+  {
+    proba_com <- proba_mat[k,] # Extract the probabilities of presence for the kth community
+    
+    # Compute Geographic rarity only if no NA is present in the community
+    if (any(is.na(proba_com))) 
+    {
+      all_geographic_rarity[k] <- NA # if NA present, Geographic rarity = NA
+    } else {
+      
+      if(index == "total") # Compute Geographic rarity as the weighted sum of the geographic rarity weights of units/species, weighted by their probability of presence in the community
+      {
+        geographic_rarity <- sum(rarity_weights * proba_com) 
+      } else { # Compute mean Geographic rarity as the weighted mean of the geographic rarity weights of units/species, weighted by their probability of presence in the community
+        geographic_rarity <- sum(rarity_weights * proba_com) / sum(proba_com)
+      }
+      all_geographic_rarity[k] <- geographic_rarity
+    }
+    
+    # Show k every 1000 iterations and save a back-up file
+    if (k %% 1000 == 0) {
+      cat(paste0(Sys.time(), " - ", k," on ",nrow(proba_mat),"\n"))
+      # save(all_geographic_rarity, file = "./outputs/Indices_maps/backup_geographic_rarity.RData")
+    }
+  }
+  
+  # Generate a mask for terrestrial areas
+  continental_mask <- (readAll(calc(proba_stack, fun = sum)) >= 0) - 1
+  
+  # Write geographic rarity in a raster with null values as background for terrestrial areas
+  geographic_rarity_raster <- continental_mask
+  geographic_rarity_raster@data@values[!is.na(all_geographic_rarity)] <- all_geographic_rarity[!is.na(all_geographic_rarity)]
+  
+  # For a raster with only communities with data
+  # geographic_rarity_raster <- proba_stack[[1]]
+  # geographic_rarity_raster@data@values <- all_geographic_rarity
+  
+  # Repair issue with max value
+  geographic_rarity_raster@data@max <- max(geographic_rarity_raster[], na.rm = T)
+  
+  return(geographic_rarity_raster)
+}
+
+source(file = "./functions/compute_geographic_rarity.R")
+
+### 9.3/ Index computation ####
+
+sp_continuous_geographic_rarity <- compute_community_geographic_rarity(sp_proba_stack, index = "mean")
+
+plot(sp_continuous_geographic_rarity)
+
+# Save
+save(sp_continuous_geographic_rarity, file = paste0("./outputs/Indices_maps/sp_continuous_geographic_rarity.RData"))
+
+
+##### 10/ Species binary geographic rarity (25% threshold) #####
+
+# Threshold such as communities host 25% of rare units/species in average
+
+# If using the weighted sum of species binary geographic rarity = Number of rare species
+# If using the weighted mean of species binary geographic rarity = Proportion of rare species
+
+### Load the stack of species SDM outputs
+sp_proba_stack <- readRDS(file = paste0("./outputs/Indices_stacks/All_sp_proba_stack_Jaccard.80.rds"))
+
+### 10.1/ Index computation ####
+
+source(file = "./functions/compute_geographic_rarity.R")
+
+# Number of rare species
+sp_binary_geographic_rarity <- compute_community_geographic_rarity(sp_proba_stack, index = "total", weight_type = "binary")
+# Proportion of rare species
+sp_binary_geographic_rarity <- compute_community_geographic_rarity(sp_proba_stack, index = "mean", weight_type = "binary")
+
+plot(sp_binary_geographic_rarity)
+
+# Save
+save(sp_binary_geographic_rarity, file = paste0("./outputs/Indices_maps/sp_binary_geographic_rarity.RData"))
+
+
+##### 11/ Mimicry continuous geographic rarity #####
+
+# If using the weighted sum of mimicry ring continuous geographic rarity = Range-size weighted mimicry richness
+# If using the weighted mean of mimicry ring continuous geographic rarity = Geographic rarity standardized by mimicry richness
+
+### Load the ring probability stack
+ring_proba_stack <- readRDS(file = paste0("./outputs/Indices_stacks/ring_proba_stack.rds"))
+
+### 11.1/ Index computation ####
+
+source(file = "./functions/compute_geographic_rarity.R")
+
+# Mean mimicry Continuous geographic rarity
+ring_continuous_geographic_rarity <- compute_community_geographic_rarity(ring_proba_stack, index = "total", weight_type = "continuous")
+# Total mimicry Continuous geographic rarity
+ring_continuous_geographic_rarity <- compute_community_geographic_rarity(ring_proba_stack, index = "mean", weight_type = "continuous")
+
+plot(ring_continuous_geographic_rarity)
+
+# Save
+save(ring_continuous_geographic_rarity, file = paste0("./outputs/Indices_maps/ring_continuous_geographic_rarity.RData"))
+
+
+
+##### 12/ Community vulnerability ######
+
+# Based on Chazot et al., 2016 (DOI: 10.1007/978-3-319-22461-9_17)
+
+# Compute community vulnerability as the sum of rings vulnerability approximated as the inverse of the local richness of each mimicry ring
+# A ring with only one species as a vulnerability of 1/1 = 1. A ring of 4 species as a vulnerability of 1/4 = 0.25.
+# Final vulnerability is standardized by total ring richness such as a community mean vulnerability
+
+### Warning! Based on the assumption that SDM output (probability of presence/habitat suitability) are suitable proxies for species abundance, 
+### thus that the number of species in a ring is a suitable proxy of the abundance of this mimicry ring in the community.
+
+### Load the stack of species richness of mimicry ring
+load(file = paste0("./outputs/Indices_stacks/ring_richness_stack.RData"))
+
+### 12.1/ Function to compute community vulnerability from stack of species richness of mimicry rings ####
+
+compute_vulnerability <- function(ring_richness_stack)
+{
+  # Function to compute Vulnerability index from vector of mimicry ring abundances (or by default, proxies)
+  vulnerability = function(x, na.rm) {
+    x <- round(x, digits = 0) # Need to round ring richness to avoid inflation of value due to numerous rings with richness values close to 0 but not null
+    if (sum(x, na.rm = T) > 0) { # Computed only if local mimicry richness >= 1 once rounded
+      x <- x[x>0] # Remove all 0 values to avoid error with 1/0
+      V <- sum(1/x, na.rm = T) # Compute non-standardized vulnerability = sum of mimicry ring vulnerability.
+      V <- V/length(x) # Standardization by local mimicry ring richness
+    }else{
+      V <- NA
+    }
+    return(V) # Output
+  }
+  
+  community_vulnerability <- readAll(calc(ring_richness_stack, fun = vulnerability))
+  
+  # Generate a mask for terrestrial areas
+  continental_mask <- (readAll(calc(ring_richness_stack, fun = sum)) >= 0) - 1
+  
+  # Add null values as background for terrestrial areas
+  vulnerability_raster <- continental_mask
+  vulnerability_raster@data@values[!is.na(community_vulnerability@data@values)] <- community_vulnerability@data@values[!is.na(community_vulnerability@data@values)]
+  
+  # Repair issue with max value
+  vulnerability_raster@data@max <- max(vulnerability_raster[], na.rm = T)
+  
+  return(vulnerability_raster)
+}
+
+source(file = "./functions/compute_vulnerability.R")
+
+### 12.2/ Function to compute weighted vulnerability (weighted by probability of presence of each ring)
+
+compute_weighted_vulnerability <- function(ring_richness_stack, ring_proba_stack)
+{
+  # Extract community data
+  ring_proba_data <- getValues(ring_proba_stack)
+  # Need to round ring richness to avoid inflation of value due to numerous rings with richness values close to 0 but not null
+  ring_richness_data <- round(getValues(ring_richness_stack), digits = 0) 
+  
+  weighted_vulnerability <- vector()
+  for (i in 1:nrow(ring_richness_data))  # Loop between communities/pixels
+  {
+    local_ring_richness <- ring_richness_data[i,] # Extract species richness of mimicry rings for this community
+    if (sum(local_ring_richness, na.rm = T) > 0) # Computed only if local mimicry richness >= 1 once rounded
+    { 
+      local_ring_richness_clean <- local_ring_richness[local_ring_richness > 0] # Remove all 0 values to avoid error with 1/0
+      ring_vulnerability <- 1/local_ring_richness_clean # Compute non-standardized vulnerabilities = inverse of mimicry ring richness
+      
+      local_ring_proba <- ring_proba_data[i,] # Extract the probabilities of presence of mimicry ring in this community
+      local_ring_proba_clean <- local_ring_proba[local_ring_richness > 0] # Remove all ring with richness = 0
+      
+      # Compute mean vulnerability weighted by probabilities of presence
+      weighted_vulnerability[i] <- weighted.mean(x = ring_vulnerability, w = local_ring_proba_clean)
+      
+    } else { # If not enough richness, set to NA.
+      weighted_vulnerability[i] <- NA
+    }
+  }
+  
+  table(weighted_vulnerability)
+  
+  # Generate a mask for terrestrial areas
+  continental_mask <- (readAll(calc(ring_richness_stack, fun = sum)) >= 0) - 1
+  
+  # Add null values as background for terrestrial areas
+  vulnerability_raster <- continental_mask
+  vulnerability_raster@data@values[!is.na(weighted_vulnerability)] <- weighted_vulnerability[!is.na(weighted_vulnerability)]
+  
+  # Repair issue with max value
+  vulnerability_raster@data@max <- max(vulnerability_raster[], na.rm = T)
+  
+  return(vulnerability_raster)
+}
+
+source(file = "./functions/compute_vulnerability.R")
+
+### 12.3/ Index computation ####
+
+community_vulnerability <- compute_vulnerability(ring_richness_stack)
+community_vulnerability <- compute_weighted_vulnerability(ring_richness_stack, ring_proba_stack)
+
+plot(community_vulnerability)
+
+# Save
+save(community_vulnerability, file = paste0("./outputs/Indices_maps/community_vulnerability.RData"))
+
+
+
+#################################### Phylogeny-based Indices ##############################################
+
+##### 13/ Load common stuff for phylogeny based indices #####
+
+library(ape)
+library(picante)
+library(geiger)
+library(treespace)
+
+
+### Create function to aggregate probabilities to higher hierachical level (aggregate pixel, or go up on a phylogenetic tree)
+aggreg_prob <- function(x, na.rm) 
+{ 
+  y <- 1-prod(1-x) 
+  return(y) # Output
+}
+
+
+#### Function that match species list in stack and phylogeny and clean them ####
+
+match_stack_and_phylo <- function (proba_stack, phylo)
+{
+  # List species in the stack
+  species_list <- names(proba_stack)
+  
+  # Remove species not in the phylogeny from the stack
+  proba_stack_for_phylo <- subset(proba_stack, which(species_list %in% phylo$tip.label))
+  
+  # Print species remove from stack because they are not in the phylogeny
+  not_in_phylo <- species_list[!(species_list %in% phylo$tip.label)]
+  if (length(not_in_phylo) > 0)
+  {
+    cat(paste0("\n", length(not_in_phylo), " species removed from stack because they are absent from the phylogeny:\n\n"))
+    print(not_in_phylo)
+    cat("\n")
+  }
+  
+  # Prune the phylogeny to keep only species in the stack
+  pruned_tree <- ape::keep.tip(phylo, names(proba_stack_for_phylo))
+  
+  # Print species remove from phylogeny because they are not in the stack
+  not_in_stack <- phylo$tip.label[!(phylo$tip.label %in% names(proba_stack_for_phylo))]
+  if (length(not_in_stack) > 0)
+  {
+    cat(paste0("\n", length(not_in_stack), " species removed from the phylogeny because they are absent from the Raster Stack:\n\n"))
+    print(not_in_stack)
+    cat("\n")
+  }
+  
+  # Return cleaned stack and phylogeny in a list
+  cleaned_stack_and_phylo <- list(proba_stack_for_phylo, pruned_tree)
+  return(cleaned_stack_and_phylo)
+}
+
+test <- match_stack_and_phylo(proba_stack, phylogeny_object)
+clean_stack <- test[[1]]
+pruned_tree <- test[[2]]
+
+# Get matrix of probabilities of presence per species (columns) per community (rows)
+proba_mat <- getValues(proba_stack_for_phylo)
+
+# Final nb of taxonomic units (species)
+n_leaves <- length(pruned_tree$tip.label)
+
+
+### Load phylogeny
+phylogeny_object <- readRDS(file = "./input_data/Phylogenies/Final_phylogeny.rds")
+
+### Load the complete stack of species SDM outputs
+sp_proba_stack <- readRDS(file = paste0("./outputs/Indices_stacks/All_sp_proba_stack_Jaccard.80.rds"))
+
+### Extract only the species in the phylogeny
+
+# Extract only the 339 species included in the phylogeny from the stacks of sp probas
+sp_proba_stack_phylo <- sp_proba_stack[[phylogeny_object$tip.label]]
+
+# Save stacks
+save(sp_proba_stack_phylo, file = paste0("./outputs/Indices_stacks/sp_proba_stack_phylo.RData"))
+saveRDS(sp_proba_stack_phylo, file = paste0("./outputs/Indices_stacks/sp_proba_stack_phylo.rds"))
+
+### Load directly the sp proba stack with only species in the phylogeny
+sp_proba_stack_phylo <- readRDS(file = paste0("./outputs/Indices_stacks/sp_proba_stack_phylo.rds"))
+
+
+##### 14/ Mean pairwise Phylogenetic Distance (MPD) ######
+
+?mpd # Cannot be used because the weighting scheme does not apply to our probability of presence of pairs of species 
+
+### 14.1/ Function to compute MPD from SDM continuous outputs
+
+compute_MPD <- function(proba_stack, phylo)
+{
+  # Match raster Stack and Phylogeny species lists
+  clean_stack_and_phylo <- match_stack_and_phylo(proba_stack, phylo)
+  proba_stack_for_phylo <- clean_stack_and_phylo[[1]]
+  pruned_tree <- clean_stack_and_phylo[[2]]
+  
+  # Get matrix of probabilities of presence per species (columns) per community (rows)
+  proba_mat <- getValues(proba_stack_for_phylo)
+  
+  # Final nb of taxonomic units (species)
+  n_leaves <- length(pruned_tree$tip.label)
+  
+  # Compute the patristic phylogenetic distances
+  phylo_dist_mat <- ape::cophenetic.phylo(x = pruned_tree)
+  
+  # Loop to compute indices per community
+  all_MPD <- NA
+  for (k in 1:nrow(proba_mat)) {
+    proba_com <- proba_mat[k,] # Extract the probabilities for the k community
+    
+    # Compute MPD only if no NA is present in the community
+    if (any(is.na(proba_com))) {
+      
+      all_MPD[k] <- NA # if NA present, MPD = NA
+      
+    } else {
+      
+      # Compute a matrix of probability of existence of pairs in the community
+      proba_pairs_mat <- matrix(data = NA, ncol = n_leaves, nrow = n_leaves)
+      for (i in 1:n_leaves) {
+        for (j in 1:n_leaves) {
+          pair_probas <- c(proba_com[i], proba_com[j])
+          proba_pairs_mat[i,j] <- prod(pair_probas) # Probability of presence of a pair = product of probability of presence of each of the species of the pair
+        }
+      }
+      
+      # Multiply them to weight phylogenetic distance by probability of presence of the pair of species
+      weighted_phylo_dist_mat <- proba_pairs_mat * phylo_dist_mat
+      
+      # Extract unique pair values and get the mean
+      total_phylo_dist <- sum(weighted_phylo_dist_mat[lower.tri(weighted_phylo_dist_mat, diag = F)]) # Extract weighted pair values and sum them
+      MPD <- total_phylo_dist/sum(proba_pairs_mat[lower.tri(proba_pairs_mat, diag = F)]) # Divide by the sum of the weights to compute the weighted mean
+      all_MPD[k] <- MPD # Store the MDP of each community in the final vector
+      
+    }
+    # Show k every 1000 iterations and save a back-up file
+    if (k %% 1000 == 0) 
+    {
+      cat(paste0(Sys.time(), " - ", k," on ",nrow(proba_mat),"\n"))
+      # save(all_MPD, file = "./outputs/Indices_Maps/MPD_backup.RData")
+    }
+  }
+  
+  # Generate a mask for terrestrial areas
+  continental_mask <- (readAll(calc(proba_stack, fun = sum)) >= 0) - 1
+  
+  # Write community MPD in a raster with null values as background for terrestrial areas
+  MPD_raster <- continental_mask
+  MPD_raster@data@values[!is.na(all_MPD)] <- all_MPD[!is.na(all_MPD)]
+  
+  # For a raster with only communities with data
+  # MPD_raster <- proba_stack[[1]]
+  # MPD_raster@data@values <- all_MPD
+  
+  # Repair issue with max value
+  MPD_raster@data@max <- max(MPD_raster[], na.rm = T)
+  
+  return(MPD_raster)
+}
+
+source(file = "./functions/compute_MPD.R")
+
+### 14.2/ Index computation ####
+
+MPD <- compute_MPD(proba_stack = proba_stack_test, phylo = phylogeny_object)
+
+plot(MPD)
+
+# Save
+save(MPD, file = paste0("./outputs/Indices_maps/MPD.RData"))
+
+
+
+##### 15/ Faith's Phylogenetic Diversity #####
+
+?pd # To compute Faith's phylogenetic distance (but not working with probabilities)
+
+### 15.1/ Function to compute Faith's PD from SDM continuous outputs ####
+
+compute_Faith_PD <- function(proba_stack, phylo)
+{
+  # Create function to aggregate probabilities to higher hierarchical level (aggregate pixel, or go up on a phylogenetic tree)
+  aggreg_prob <- function(x, na.rm) 
+  { 
+    y <- 1 - prod(1 - x) 
+    return(y) # Output
+  }
+  
+  # Match raster Stack and Phylogeny species lists
+  clean_stack_and_phylo <- match_stack_and_phylo(proba_stack, phylo)
+  proba_stack_for_phylo <- clean_stack_and_phylo[[1]]
+  pruned_tree <- clean_stack_and_phylo[[2]]
+  
+  # Get matrix of probabilities of presence per species (columns) per community (rows)
+  proba_mat <- getValues(proba_stack_for_phylo)
+  
+  # Final nb of taxonomic units (species)
+  n_leaves <- length(pruned_tree$tip.label)
+  
+  # Generate matrix to store info on edges/branches from the pruned phylogeny
+  branches = as.data.frame(matrix(NA, nrow(pruned_tree$edge), ncol = 4)) 
+  names(branches) <- c("Starting nod", "Ending nod", "Length", "Proba_presence")
+  branches[, 1:2] = pruned_tree$edge # Retrieve starting and ending node 
+  branches[, 3] = round(pruned_tree$edge.length, 4) # Retrieve edge length
+  
+  # Make a loop per community
+  all_PD <- NA
+  for (k in 1:nrow(proba_mat)) {
+    proba_com <- proba_mat[k,] # Extract the proba for the k community
+    
+    # Compute PD only if no NA is present in the community
+    if (any(is.na(proba_com))) {
+      
+      all_PD[k] <- NA # if NA present, PD = NA
+      
+    } else {
+      
+      # Compute probability of presence of each edge/branch (i.e., a species descending from this branch) in this community
+      for (i in 1:nrow(branches)) {
+        descending_species = geiger::tips(pruned_tree, branches[i, 2]) # Retrieve the set of species descending from branch i
+        index <- which(colnames(proba_mat) %in% descending_species) # Find position of the species in the stack/matrix
+        prob_edge <- aggreg_prob(proba_com[index]) # Compute probability of presence of the edge
+        branches[i, 4] <- prob_edge # Store info
+      }
+      PD <- round(sum(branches[,3] * branches[,4]), 4) # Compute PD as the weighted sum of the edge length (weighted by the probability of presence of this edge in the community)
+      all_PD[k] <- PD
+    }
+    
+    # Show k every 1000 iterations and save a backup
+    if (k %% 1000 == 0) {
+      cat(paste0(Sys.time(), " - ", k," on ",nrow(proba_mat),"\n"))
+      # save(all_PD, file = "./outputs/Indices_Maps/PD_backup.RData")
+    }
+  }
+  
+  # Write community PD in a raster
+  PD_raster <- proba_stack[[1]]
+  PD_raster@data@values <- all_PD
+  
+  # Repair issue with max value
+  PD_raster@data@max <- max(PD_raster[], na.rm = T)
+  
+  return(PD_raster)
+  
+}
+
+source(file = "./functions/compute_Faith_PD.R")
+
+### 15.2/ Index computation ####
+
+Faith_PD <- compute_Faith_PD(sp_proba_stack, phylo = phylogeny_object)
+
+plot(Faith_PD)
+
+# Save
+save(Faith_PD, file = paste0("./outputs/Indices_maps/Faith_PD.RData"))
+
+
+##### 16/ Fair-proportions #####
+
+# Fair-Proportion : distribute evolutionary time of each edge/branchs equally among its descending species
+
+# At species level = Sum of all modified branches length from the root to the species. The most original species have the highest scores
+# At community level = Sum of FP values of each species present in the community. The community with the most original species has the highest scores
+# Can be standardized by the number of species to get the mean species FP index
+
+### 16.1/ Function to compute species FP from a phylogeny ####
+
+compute_species_FP <- function(phylo)
+{
+  # Generate table that store information on branches
+  phylo_branches_df = as.data.frame(matrix(NA, nrow(phylo$edge), ncol = 5)) 
+  names(phylo_branches_df) <- c("Starting_node","Ending_node","Branch_Length","Nb_desc_sp","FP")
+  
+  # Retrieve starting and ending nodes for each branches 
+  phylo_branches_df[, c("Starting_node","Ending_node")] = phylo$edge 
+  # Retrieve edge length
+  phylo_branches_df$Branch_Length = phylo$edge.length 
+  # Retrieve number of descending species/leaves (terminal nods)
+  for (i in 1:nrow(phylo$edge)) 
+  { 
+    phylo_branches_df$Nb_desc_sp[i] = length(geiger::tips(phylo, phylo_branches_df$Ending_node[i]))
+  }
+  # Divide branch length by nb of descendant species for FP
+  phylo_branches_df$FP = phylo_branches_df$Branch_Length/phylo_branches_df$Nb_desc_sp 
+  
+  # Generate table to store species Fair-Proportions
+  species_FP_df <- data.frame(Taxon = phylo$tip.label, FP = NA)
+  
+  # Compute species Fair-Proportions
+  for (i in 1:length(phylo$tip.label))
+  {
+    # Retrieve species name
+    sp <- phylo$tip.label[i] 
+    
+    # Get indices of nods on the path from the root to the species terminal nod
+    sp_path <- ape::nodepath(phy = phylo, 
+                             from = phylo_branches_df$Starting_node[which.max(phylo_branches_df$Nb_desc_sp)], # Root
+                             to = which(phylo$tip.label == sp)) # Tip
+    
+    # Compute FP index for the species by summing FP values of the branches on the path to the species tip in the phylogeny 
+    species_FP_df$FP[species_FP_df$Taxon == sp] <- sum(phylo_branches_df[which(phylo_branches_df$Ending_node %in% sp_path), "FP"]) 
+  }
+  
+  return(species_FP_df)
+}
+
+source(file = "./functions/compute_Fair_Proportions.R")
+
+compute_species_FP(phylo = phylogeny_object)
+
+### 16.2/ Function to compute community mean and total FP from SDM continuous outputs ####
+
+# Choose between "total" FP and "mean" FP with the "index" argument to select which index to compute
+# Choose between "full" and "pruned" with the "phylo_type" argument to select which phylogeny to use to compute species FP
+
+compute_community_FP <- function(proba_stack, phylo, phylo_type = "full", index = "total")
+{
+  # Match raster Stack and Phylogeny species lists
+  clean_stack_and_phylo <- match_stack_and_phylo(proba_stack, phylo)
+  proba_stack_for_phylo <- clean_stack_and_phylo[[1]]
+  
+  # Get matrix of probabilities of presence per species (columns) per community (rows)
+  proba_mat <- getValues(proba_stack_for_phylo)
+  
+  # By default, compote the species FP on the full phylogeny
+  if (phylo_type == "full") 
+  {
+    # Compute the species FP based on the full phylogeny (because the pruned tree may exhibit sampling bias)
+    species_FP_df <- compute_species_FP(phylo = phylo)
+    # Keep only the species present in the stack
+    species_FP_df <- species_FP_df[species_FP_df$Taxon %in% names(proba_stack_for_phylo), ]
+  }
+  
+  # If requested, use the pruned phylogeny with only the species from the stack to compute the species FP
+  if (phylo_type == "pruned")
+  {
+    pruned_tree <- clean_stack_and_phylo[[2]]
+    species_FP_df <- compute_species_FP(phylo = pruned_tree)
+  }
+  
+  # Make a loop per community to compute community FP
+  all_FP <- rep(NA, nrow(proba_mat))
+  for (k in 1:nrow(proba_mat)) 
+  {
+    proba_com <- proba_mat[k,] # Extract the probabilities of presence for the kth community
+    
+    # Compute FP only if no NA is present in the community
+    if (any(is.na(proba_com))) 
+    {
+      all_FP[k] <- NA # if NA present, FP = NA
+    } else {
+      
+      if(index == "total") # Compute FP as the weighted sum of the FP index of species, weighted by their probability of presence in the community
+      {
+        FP <- sum(species_FP_df$FP * proba_com) 
+      } else { # Compute mean FP as the weighted mean of the FP index of species, weighted by their probability of presence in the community
+        FP <- sum(species_FP_df$FP * proba_com) / sum(proba_com)
+      }
+      all_FP[k] <- FP
+    }
+    
+    # Show k every 1000 iterations and save a back-up file
+    if (k %% 1000 == 0) {
+      cat(paste0(Sys.time(), " - ", k," on ",nrow(proba_mat),"\n"))
+      # save(all_FP, file = "./outputs/Indices_maps/backup_FP.RData")
+    }
+  }
+  
+  # Write community FP in a raster
+  FP_raster <- proba_stack[[1]]
+  FP_raster@data@values <- all_FP
+  
+  # Repair issue with max value
+  FP_raster@data@max <- max(FP_raster[], na.rm = T)
+  
+  return(FP_raster)
+}
+
+source(file = "./functions/compute_Fair_Proportions.R")
+
+### 16.3/ Index computation ####
+
+community_FP <- compute_community_FP(proba_stack[[1:10]], phylo = phylogeny_object)
+
+plot(community_FP)
+
+# Save
+save(community_FP, file = paste0("./outputs/Indices_maps/community_FP.RData"))
+
+
+
+
+##### 17/ Ring size: (a) Mean, (b) Weighted Mean, (c) Quantiles #####
+
+### Load the stack of species richness of mimicry ring
+load(file = paste0("./outputs/Indices_stacks/ring_richness_stack.RData"))
+
+### 17.1/ Function to compute ring size from stack of species richness of mimicry rings ####
+
+compute_ring_size <- function(ring_richness_stack, ring_proba_stack = NULL, type = "mean", quantile = NULL)
+{
+  # If simple mean
+  if (type == "mean")
+  {
+    # Compute species richness
+    species_richness <- readAll(calc(ring_richness_stack, fun = sum))
+    # Compute ring richness
+    ring_richness <- readAll(calc(ring_proba_stack, fun = sum))
+    # Compute mean ring size as species richness / ring richness
+    ring_size_raster <- species_richness/ring_richness
+    all_ring_size <- getValues(ring_size_raster)
+    
+  } else {  # If not, need to loop by community/pixel
+    
+    # Extract community data
+    ring_richness_data <- getValues(ring_richness_stack)
+    if (type == "weighted_mean") {ring_proba_data <- getValues(ring_proba_stack)}
+    
+    # Initiate vector
+    all_ring_size <- vector()
+    # Loop between communities/pixels
+    for (i in 1:nrow(ring_richness_data))  
+    {
+      # Extract local ring richness
+      local_ring_richness <- ring_richness_data[i,]   
+      
+      # If weighted mean ring size
+      if (type == "weighted_mean")
+      {
+        # Extract local ring probabilities of presence as weights
+        local_ring_proba <- ring_proba_data[i,]
+        # Compute mean ring size weighted by probabilities of presence
+        all_ring_size[i] <- weighted.mean(x = local_ring_richness, w = local_ring_proba)
+      }
+      
+      # If provided a quantile
+      if (type == "quantile")  
+      {
+        # Need to round ring richness to avoid deflation of value due to numerous rings with richness values close to 0 but not null
+        local_ring_richness <- round(local_ring_richness, digits = 0) 
+        # Remove null values
+        local_ring_richness_clean <- local_ring_richness[local_ring_richness != 0]
+        
+        # Extract quantile
+        all_ring_size[i] <- quantile(x = local_ring_richness_clean, probs = quantile, na.rm = T)
+      }
+      
+      # Show i every 10,000 iterations and save a back-up file
+      if (i %% 10000 == 0) 
+      {
+        cat(paste0(Sys.time(), " - ", i," on ",nrow(ring_richness_data),"\n"))
+        # save(all_ring_size, file = "./outputs/Indices_Maps/ring_size_backup.RData")
+      }
+    }
+  }
+  
+  # Generate a mask for terrestrial areas
+  continental_mask <- (readAll(calc(ring_richness_stack, fun = sum)) >= 0) - 1
+  
+  # Add null values as background for terrestrial areas
+  ring_size_raster <- continental_mask
+  ring_size_raster@data@values[!is.na(all_ring_size)] <- all_ring_size[!is.na(all_ring_size)]
+  
+  # # For a raster with only communities with data
+  # ring_size_raster <- ring_richness_stack[[1]]
+  # ring_size_raster@data@values <- all_ring_size
+  
+  # Repair issue with max value
+  ring_size_raster@data@max <- max(ring_size_raster[], na.rm = T)
+  
+  return(ring_size_raster)
+}
+
+source(file = "./functions/compute_ring_size.R")
+
+### 17.2/ Index computation ####
+
+ring_size <- compute_ring_size(ring_richness_stack, ring_proba_stack, type = "mean")
+ring_size <- compute_ring_size(ring_richness_stack, type = "quantile", quantile = 0.5)
+ring_size <- compute_ring_size(ring_richness_stack, type = "quantile", quantile = 0.9)
+ring_size <- compute_ring_size(ring_richness_stack, type = "quantile", quantile = 0.1)
+ring_size <- compute_ring_size(ring_richness_stack, ring_proba_stack, type = "weighted_mean")
+
+plot(ring_size)
+
+# Save
+save(ring_size, file = paste0("./outputs/Indices_maps/ring_size.RData"))
+
+
+##### 18/ Beta diversity #####
+
+library("betapart")
+
+?betapart::phylo.beta.pair()
+?betapart::phylo.beta.multi()
+
+### 18.1/ Binarize SDM continuous outputs following ranks ####
+
+### 18.1.1/ Function to binarize following SDM scores ranking ####
+
+binarize_output_with_ranks <- function (proba_stack)
+{
+  cat(paste0(Sys.time(), " - Binarization - Start\n"))
+  
+  # Extract community matrix
+  proba_mat <- raster::getValues(proba_stack)
+  
+  # Extract community richness
+  com_richness <- raster::getValues(calc(x = proba_stack, fun = sum))
+  # Round it to get only integer as number of species expected
+  rounded_richness <- round(x = com_richness, digits = 0)
+  
+  # Rank species probability of presence in each community
+  com_rank_mat <- t(apply(X = proba_mat, MARGIN = 1, FUN = rank, na.last = "keep", ties.method = "random"))
+  
+  # Create 3D array to store binary data
+  binary_array <- array(dim = c(proba_stack@nrows, proba_stack@ncols, ncol(proba_mat)),
+                        dimnames = list(NULL, NULL, colnames(proba_mat)))
+  
+  # Fill the binary array, community by community
+  for (i in 1:nrow(proba_mat))
+  {
+    # Extract species rank in the community
+    com_rank <- com_rank_mat[i, ]
+    # Binarize according to expected species richness
+    binary_com <- com_rank > (max(com_rank) - rounded_richness[i])
+    # Retrieve community indices in the 3D array
+    RowCol <- raster::rowColFromCell(object = proba_stack, cell = i)
+    # Fill data in the array
+    binary_array[RowCol[1], RowCol[2], ] <- as.numeric(binary_com)
+    
+    if (i %% 1000 == 0) { cat(paste0(Sys.time(), " - ", i," on ",nrow(proba_mat),"\n")) }
+  }
+  
+  # Write binary data in a Raster Brick
+  binary_brick <- raster::brick(x = binary_array,
+                                xmn = proba_stack@extent[1],
+                                xmx = proba_stack@extent[2],
+                                ymn = proba_stack@extent[3],
+                                ymx = proba_stack@extent[4],
+                                crs = proba_stack@crs)
+  
+  # Repair issue with min & max value
+  binary_brick@data@min <- as.numeric(apply(X = binary_array, MARGIN = 3, FUN = min, na.rm = T))
+  binary_brick@data@max <- as.numeric(apply(X = binary_array, MARGIN = 3, FUN = max, na.rm = T))
+  
+  # Convert to Raster Stack
+  binary_stack <- raster::stack(binary_brick)
+  
+  return(binary_stack)
+  
+  cat(paste0(Sys.time(), " - Binarization - Done\n"))
+}
+
+source(file = "./functions/compute_betadiversity.R")
+
+### 18.1.2/ Binarize SDM outputs following ranks ####
+
+sp_binary_stack <- binarize_output_with_ranks(sp_proba_stack)
+# binary_stack <- binarize_output_with_ranks(proba_stack_test)
+
+plot(sp_binary_stack)
+
+# Save
+save(sp_binary_stack, file = paste0("./outputs/Indices_maps/sp_binary_stack.RData"))
+
+load(file = paste0("./outputs/Indices_maps/sp_binary_stack.RData"))
+
+### 18.2/ Betadiversity in reference to a focal point ####
+
+### 18.2.1/ Function to compute betadiversity in reference to a focal point ####
+
+##### Need to be improved to 
+# Allow to provide a sp polygon or sf object to define the focal region
+# Aggregate info in a single line to use as the focal (duplicate it for each pixel so they appear with value = 0)
+# Add the option to compute for combination of parameters, all at the same time...
+
+compute_focal_betadiversity <- function (proba_stack, diversity_type = "taxo",
+                                         phylo = NULL, index_family = "sorensen",
+                                         beta_part = "turnover", focal_site_coords)
+{
+  ### Prepare data
+  
+  # Binarize output following probability ranks if needed
+  if (any(!is.element(unique(as.vector(getValues(proba_stack))), c(NA, 0, 1))))
+  {
+    binary_stack <- binarize_output_with_ranks(proba_stack)
+  } else {
+    binary_stack <- proba_stack
+  }
+  
+  # If using the phylogenetic beta-diversity, need to match raster Stack and phylogeny species lists
+  if (diversity_type == "phylo")
+  {
+    # Match raster Stack and Phylogeny species lists
+    clean_stack_and_phylo <- match_stack_and_phylo(binary_stack, phylo)
+    binary_stack <- clean_stack_and_phylo[[1]]
+    pruned_tree <- clean_stack_and_phylo[[2]]
+  }
+  
+  # Extract community matrix
+  binary_mat <- raster::getValues(binary_stack)
+  
+  # Remove communities with NA
+  binary_mat_clean <- na.omit(binary_mat)
+  removed_com_indices <- as.numeric(attr(binary_mat_clean, which = "na.action"))
+  
+  ### Compute betadiversity with Baselga partitioning between turnover and nestedness
+  
+  # For taxonomical beta-diversity based on species identity
+  if (diversity_type == "taxo")
+  {
+    beta_results <- betapart::beta.pair(x = binary_mat_clean, index.family = index_family)
+  }
+  
+  # For phylogenetic beta-diversity based on Faith's Phylogenetic Diversity
+  if (diversity_type == "phylo")
+  {
+    beta_results <- betapart::phylo.beta.pair(x = binary_mat_clean, tree = pruned_tree, index.family = index_family)
+  }
+  
+  # Depending on the partition of beta-diversity
+  if (beta_part == "turnover") {beta_mat <- as.matrix(beta_results[[1]])}
+  if (beta_part == "nestedness") {beta_mat <- as.matrix(beta_results[[2]])}
+  if (beta_part == "total") {beta_mat <- as.matrix(beta_results[[3]])}
+  
+  # Rebuilt matrix including NA communities
+  beta_mat_full <- matrix(data = NA, nrow = nrow(binary_mat), ncol = nrow(binary_mat))
+  if (length(removed_com_indices) > 0)
+  {
+    beta_mat_full[-removed_com_indices, -removed_com_indices] <- beta_mat
+  } else {
+    beta_mat_full <- beta_mat
+  }
+  
+  ### Extract only result in reference to the focal point
+  
+  # Convert coordinates into the proper CRS if not in Latitude and Longitude
+  if (!stringr::str_detect(string = proba_stack@crs, pattern = "\\+proj=longlat"))
+  {
+    focal_site_coords <- data.frame(lon = focal_site_coords[1], lat = focal_site_coords[2])
+    coordinates(focal_site_coords) <- c("lon", "lat") # Transform into Spatial Points object
+    proj4string(focal_site_coords) <- CRS("+init=epsg:4326") # Assign WGS84 CRS
+    focal_site_coords <- sp::spTransform(x = focal_site_coords, CRSobj = proba_stack@crs)
+    focal_site_coords <- focal_site_coords@coords
+  }
+  
+  # Get the index of the focal site
+  focal_site_index <- raster::cellFromXY(object = binary_stack, xy = focal_site_coords)
+  # Extract associated beta-diversity indices
+  beta_focal <- beta_mat_full[focal_site_index,]
+  
+  ### Format the output
+  
+  # Write focal betadiversity in a raster Layer
+  focal_betadiv <- proba_stack[[1]]
+  focal_betadiv@data@values <- beta_focal
+  
+  # Repair issue with min/max values
+  focal_betadiv@data@min <- min(focal_betadiv[], na.rm = T)
+  focal_betadiv@data@max <- max(focal_betadiv[], na.rm = T)
+  
+  return(focal_betadiv)
+  
+}
+
+source(file = "./functions/compute_betadiversity.R")
+
+### 18.2.2/ Compute focal betadiversity maps ####
+
+# Find coordinates of the richest pixel to use as focal point
+richest_com_coords <- raster::xyFromCell(object = sp_proba_stack, cell = which.max(apply(X = sp_proba_stack[], MARGIN = 1, FUN = sum, na.rm = T)))
+
+focal_betadiversity <- compute_focal_betadiversity(sp_binary_stack,
+                                                   index_family = "sorensen", 
+                                                   beta_part = "turnover", 
+                                                   focal_site_coords = richest_com_coords)
+
+plot(focal_betadiversity)
+
+focal_betaphylodiversity <- compute_focal_betadiversity(sp_binary_stack,
+                                                        diversity_type = "phylo",
+                                                        phylo = phylogeny_object,
+                                                        index_family = "jaccard", 
+                                                        beta_part = "turnover", 
+                                                        focal_site_coords = richest_com_coords)
+
+plot(focal_betaphylodiversity)
+
+# Save
+save(focal_betadiversity, file = paste0("./outputs/Indices_maps/focal_betadiversity.RData"))
+save(focal_betaphylodiversity, file = paste0("./outputs/Indices_maps/focal_betaphylodiversity.RData"))
+
+
+### 18.3/ Betadiversity with a moving window ####
+
+### 18.3.1/ Function to compute betadiversity with a moving window ####
+
+# Size of the window, default as a proportion
+# Multi vs. mean pairwise
+
+### Can be improved by adding the option to compute for combination of parameters, all at the same time...
+
+compute_moving_betadiversity <- function (proba_stack, diversity_type = "taxo",
+                                          phylo = NULL, index_family = "sorensen",
+                                          beta_part = "turnover", aggreg_type = "multi",
+                                          window_width = "default", window_height = "default", # In pixels, extended from the focal point
+                                          border_rule = NULL)  # Add an option on how to deal with the borders
+{
+  cat(paste0(Sys.time(), " - Betadiversity Computation - Start\n"))
+  
+  ### Adjust default window size to a fifth of raster width and height
+  
+  if (window_width == "default")
+  {
+    window_width <- round(proba_stack@ncols/10)
+    if (window_width == 0) {window_width <- 1}
+  }
+  if (window_height == "default")
+  {
+    window_height <- round(proba_stack@nrows/10)
+    if (window_height == 0) {window_height <- 1}
+  }
+  
+  ### Prepare data
+  
+  # Binarize output following probability ranks if needed
+  if (any(!is.element(unique(as.vector(getValues(proba_stack))), c(NA, 0, 1))))
+  {
+    binary_stack <- binarize_output_with_ranks(proba_stack)
+  } else {
+    binary_stack <- proba_stack
+  }
+  
+  # If using the phylogenetic beta-diversity, need to match raster Stack and phylogeny species lists
+  if (diversity_type == "phylo")
+  {
+    # Match raster Stack and Phylogeny species lists
+    clean_stack_and_phylo <- match_stack_and_phylo(binary_stack, phylo)
+    binary_stack <- clean_stack_and_phylo[[1]]
+    pruned_tree <- clean_stack_and_phylo[[2]]
+  }
+  
+  # Extract community matrix
+  binary_mat <- raster::getValues(binary_stack)
+  
+  ### Loop to move from pixel to pixel
+  all_beta_values <- NA
+  for (i in 1:nrow(binary_mat))
+  {
+    # i <- 1
+    
+    # Initiate control for focal data and regional data
+    no_focal_data <- F
+    no_regional_data <- F
+    
+    # Extract cell location
+    RowCol <- raster::rowColFromCell(object = binary_stack, cell = i)
+    
+    ### Warning: Window size is reduced for right (add) and bottom borders (cutoff), but not for left and upper borders (shift window)
+    # Add an option on how to deal with the borders with border_rule
+    
+    # Extract regional data
+    regional_data <- raster::getValuesBlock(x = binary_stack, 
+                                            row = RowCol[1] - window_width,
+                                            col = RowCol[2] - window_height,
+                                            nrow = window_width*2 + 1,
+                                            ncol = window_height*2 + 1)
+    ### Prepare assemblage data
+    
+    if (aggreg_type == "focal_pairwise") # For focal pairwise, need to put the focal site on the first row
+    {
+      # Extract data from the focal site
+      ### Warning: does not work when the window reach the bottom border because extra rows are cut-off...
+      focal_data <- regional_data[ceiling(nrow(regional_data)/2), ]
+      # Check if focal site has data
+      if (any(is.na(focal_data)))
+      {
+        no_focal_data <- T
+        beta_value <- NA
+      }
+      
+      # Remove focal data from the regional data
+      regional_data_clean <- regional_data[-ceiling(nrow(regional_data)/2), ]
+      
+      # Clean sites with NA
+      regional_data_clean <- na.omit(regional_data_clean) 
+      
+      # Add the focal site on the first row
+      regional_data_clean <- rbind(focal_data, regional_data_clean)
+      
+    } else { # For other aggregation type, only need to clean sites with NA
+      # Clean sites with NA
+      regional_data_clean <- na.omit(regional_data) 
+    }
+    
+    ### Check there are at least two communities with data in the region
+    if (nrow(regional_data_clean) < 2)
+    {
+      no_regional_data <- T
+      beta_value <- NA
+    }
+    
+    ### Compute index if needed
+    
+    if (!no_focal_data & !no_regional_data)
+    {
+      # For taxonomic beta-diversity based on species identity
+      if (diversity_type == "taxo")
+      {
+        if (aggreg_type == "multi")
+        {
+          # Compute multi-sites taxonomic beta-diversity for all sites
+          beta_results <- betapart::beta.multi(x = regional_data_clean, index.family = index_family)
+        } else { 
+          # Compute pairwise taxonomic beta-diversity for all pairs of sites
+          beta_results <- betapart::beta.pair(x = regional_data_clean, index.family = index_family)
+        }
+      }
+      
+      # For phylogenetic beta-diversity based on Faith's Phylogenetic Diversity
+      if (diversity_type == "phylo")
+      {
+        if (aggreg_type == "multi")
+        {
+          # Compute multi-sites phylogenetic beta-diversity for all sites
+          beta_results <- betapart::phylo.beta.multi(x = regional_data_clean, tree = pruned_tree, index.family = index_family)
+        } else { 
+          # Compute pairwise phylogenetic beta-diversity for all pairs of sites
+          beta_results <- betapart::phylo.beta.pair(x = regional_data_clean, tree = pruned_tree, index.family = index_family)
+        }
+      }
+      
+      ### Extract results
+      
+      # Depending on the partition of beta-diversity
+      if (beta_part == "turnover") {beta_dist <- beta_results[[1]]}
+      if (beta_part == "nestedness") {beta_dist <- beta_results[[2]]}
+      if (beta_part == "total") {beta_dist <- beta_results[[3]]}
+      
+      # For multi-site index, pixel value is the multi-site beta-diversity
+      if (aggreg_type == "multi")
+      {
+        beta_value <- round(as.numeric(beta_dist), 5)
+      }
+      
+      # For pairwise index, pixel value is the mean pairwise beta-diversity across all pairs of regional sites
+      if (aggreg_type == "all_pairwise")
+      {
+        beta_value <- round(mean(beta_dist, na.rm = T), 5)
+      }
+      
+      # For focal pairwise index, pixel value is the mean pairwise beta-diversity of for all other regional sites in reference to the focal site
+      if (aggreg_type == "focal_pairwise")
+      {
+        beta_value <- round(mean(as.matrix(beta_dist)[1, -1], na.rm = T), 5)
+      }
+    }
+    
+    # Store value for that pixel
+    all_beta_values[i] <- beta_value
+    
+    # Show i every 100 iterations and save a back-up file
+    if (i %% 100 == 0) 
+    {
+      cat(paste0(Sys.time(), " - ", i," on ",nrow(binary_mat),"\n"))
+      # save(all_FP, file = "./outputs/Indices_maps/backup_betadiversity_moving.RData")
+    }
+  }
+  
+  # Generate a mask for terrestrial areas
+  continental_mask <- (calc(proba_stack, fun = sum) >= 0) - 1
+  
+  # Write beta-diversity values in a raster without continental borders
+  betadiversity_raster_no_borders <- proba_stack[[1]]
+  betadiversity_raster_no_borders@data@values <- all_beta_values
+  
+  # Apply continental mask to set NA pixels to NA values to avoid issue with extending borders due to the window
+  betadiversity_raster_no_borders[is.na(continental_mask[])] <- NA
+  
+  # Write beta-diversity values in a raster with null values as background for terrestrial areas to show terrestrial borders
+  betadiversity_raster <- continental_mask
+  betadiversity_raster@data@values[!(is.na(betadiversity_raster_no_borders@data@values) | is.nan(betadiversity_raster_no_borders@data@values))] <- betadiversity_raster_no_borders@data@values[!(is.na(betadiversity_raster_no_borders@data@values) | is.nan(betadiversity_raster_no_borders@data@values))]
+  
+  # Repair issue with min/max values
+  betadiversity_raster@data@max <- min(betadiversity_raster[], na.rm = T)
+  betadiversity_raster@data@max <- max(betadiversity_raster[], na.rm = T)
+  
+  return(betadiversity_raster)
+  
+  cat(paste0(Sys.time(), " - Betadiversity Computation - Done\n"))
+}
+
+source(file = "./functions/compute_betadiversity.R")
+
+### 18.3.2/ Compute betadiversity with a moving window ####
+
+moving_betadiversity <- compute_moving_betadiversity(sp_binary_stack, diversity_type = "taxo",
+                                                     phylo = NULL, index_family = "sorensen",
+                                                     beta_part = "turnover", aggreg_type = "all_pairwise",
+                                                     window_width = 1, window_height = 1, # In pixels, extended from the focal point
+                                                     border_rule = NULL)  # Add an option on how to deal with the borders
+
+
+moving_betaphylodiversity <- compute_moving_betadiversity(sp_binary_stack, diversity_type = "phylo",
+                                                          phylo = phylogeny_object, index_family = "sorensen",
+                                                          beta_part = "turnover", aggreg_type = "all_pairwise",
+                                                          window_width = 1, window_height = 1, # In pixels, extended from the focal point
+                                                          border_rule = NULL)  # Add an option on how to deal with the borders
+
+hist(moving_betadiversity[])
+hist(moving_betaphylodiversity[])
+
+moving_betadiversity_contrasted <- contrasting_raster(x = moving_betadiversity, zmin = 0, zmax = 0.4)
+moving_betaphylodiversity_contrasted <- contrasting_raster(x = moving_betaphylodiversity, zmin = 0, zmax = 0.3)
+
+plot(moving_betadiversity_contrasted)
+plot(moving_betaphylodiversity_contrasted)
+
+# Save
+save(moving_betadiversity, file = paste0("./outputs/Indices_maps/moving_betadiversity.RData"))
+save(moving_betaphylodiversity, file = paste0("./outputs/Indices_maps/moving_betaphylodiversity.RData"))
+
+
+# #### Test for getValuesBlock border rules ####
+# 
+# test <- raster::crop(x = sp_proba_stack[[1:5]], y = extent(-80.5, -79.2, -1.2, 0))
+# test_matrix <- matrix(data = 1:125, nrow = 25, ncol = 5)
+# colnames(test_matrix) <- colnames(test@data@values)
+# test@data@values <- test_matrix
+#  
+# test_stack <- stack(test)
+# 
+# plot(test_stack)
+# 
+# regional_data <- raster::getValuesBlock(x = test_stack, 
+#                                         row = 2,
+#                                         col = 2,
+#                                         nrow = 2*2 + 1,
+#                                         ncol = 1*2 + 1)
+# 
+# regional_data
+
+
+### 18.4/ Betadiversity within regions ####
+
+### To improve ?
+# All types of inputs: spPolygons + sf object + raster Layer (or Stack) as a "mask"
+
+
+### 18.4.1/ Function to compute any type of betadiversity from a sites x species matrix ####
+
+compute_betadiversity <- function (regional_data, diversity_type, # "taxo" or "phylo"
+                                   phylo, index_family, # "jaccard" or "sorensen"
+                                   beta_part, # "total", "nestedness" or "turnover"
+                                   aggreg_type, # "multi" or "mean_pairwise"
+                                   verbose = T) # To display progess
+{
+  if (verbose) { cat(paste0(Sys.time(), " - Betadiversity Computation - Start for ", diversity_type," betadiversity ; Family = ",index_family," ; Partition = ",beta_part," ; Aggregation = ",aggreg_type,"\n")) }
+  
+  ### Prepare data 
+  
+  # Initiate check for the presence of data
+  no_regional_data <- F
+  
+  # Clean sites with NA
+  regional_data_clean <- na.omit(regional_data) 
+  
+  # Check there are at least two communities with data in the region
+  if (nrow(regional_data_clean) < 2)
+  {
+    no_regional_data <- T
+    beta_value <- NA
+  }
+  
+  test <- sampleRegular(x = proba_stack, size = 1000, asRaster = T)
+  plot(test)
+  plot(proba_stack)
+  
+  ### Compute indices if needed 
+  if (!no_regional_data)
+  {
+    # For taxonomic beta-diversity based on species identity
+    if (diversity_type == "taxo")
+    {
+      if (aggreg_type == "multi")
+      {
+        # Compute multi-sites taxonomic beta-diversity for all sites
+        beta_results <- betapart::beta.multi(x = regional_data_clean, index.family = index_family)
+      } else { 
+        # Compute pairwise taxonomic beta-diversity for all pairs of sites
+        beta_results <- betapart::beta.pair(x = regional_data_clean, index.family = index_family)
+      }
+    }
+    
+    # For phylogenetic beta-diversity based on Faith's Phylogenetic Diversity
+    if (diversity_type == "phylo")
+    {
+      if (aggreg_type == "multi")
+      {
+        # Compute multi-sites phylogenetic beta-diversity for all sites
+        beta_results <- betapart::phylo.beta.multi(x = regional_data_clean, tree = phylo, index.family = index_family)
+      } else { 
+        # Compute pairwise phylogenetic beta-diversity for all pairs of sites
+        beta_results <- betapart::phylo.beta.pair(x = regional_data_clean, tree = phylo, index.family = index_family)
+      }
+    }
+    
+    ### Extract results
+    
+    # Depending on the partition of beta-diversity
+    if (beta_part == "turnover") {beta_dist <- beta_results[[1]]}
+    if (beta_part == "nestedness") {beta_dist <- beta_results[[2]]}
+    if (beta_part == "total") {beta_dist <- beta_results[[3]]}
+    
+    # For multi-site index, pixel value is the multi-site beta-diversity
+    if (aggreg_type == "multi")
+    {
+      beta_value <- round(as.numeric(beta_dist), 5)
+    }
+    
+    # For pairwise index, pixel value is the mean pairwise beta-diversity across all pairs of regional sites
+    if (aggreg_type == "mean_pairwise")
+    {
+      beta_value <- round(mean(beta_dist, na.rm = T), 5)
+    }
+  }  
+  
+  if (verbose) { cat(paste0(Sys.time(), " - Betadiversity Computation - Done for ", diversity_type," betadiversity ; Family = ",index_family," ; Partition = ",beta_part," ; Aggregation = ",aggreg_type,"\n")) }
+  
+  return(beta_value)
+}
+
+source(file = "./functions/compute_betadiversity.R")
+
+
+### 18.4.2/ Function to compute betadiversity within regions ####
+
+# Compute betadiversity across all pixels/sites of each region, and eventually map them
+
+compute_within_regional_betadiversity <- function (proba_stack, list_sp_regions, region_names,
+                                                   subsample_size = NA, # Provide number of pixels to subsample globally and regularly in order to save computing time, especially if phylobetadiversity is computed
+                                                   diversity_type = "taxo",
+                                                   phylo = NULL, index_family = "sorensen",
+                                                   beta_part = c("turnover", "total"), 
+                                                   aggreg_type = "mean_pairwise",
+                                                   regions_map = T, # To create and display a map of regions with "within" regional betadiversity values
+                                                   output_type = "ggplot_df", # To choose the type of df as output
+                                                   verbose = T) # To display progress at each iteration of the purrr:pmap()
+{
+  cat(paste0(Sys.time(), " - Within regional Betadiversity Computation - Start\n"))
+  
+  ### Prepare input data
+  final_output <- list()
+  
+  # Subsample sites in a standardized fashion such as density of sampling remains the same for all regions
+  if (!is.na(subsample_size))
+  {
+    proba_stack <- raster::sampleRegular(x = proba_stack, size = subsample_size, asRaster = T)
+  }
+  
+  # Binarize output following probability ranks if needed
+  if (any(!is.element(unique(as.vector(getValues(proba_stack))), c(NA, 0, 1))))
+  {
+    binary_stack <- binarize_output_with_ranks(proba_stack)
+  } else {
+    binary_stack <- proba_stack
+  }
+  
+  # If using the phylogenetic beta-diversity, need to match Raster Stack and phylogeny species lists
+  pruned_tree <- phylo
+  if ("phylo" %in% diversity_type)
+  {
+    # Match raster Stack and Phylogeny species lists
+    clean_stack_and_phylo <- match_stack_and_phylo(binary_stack, phylo)
+    binary_stack <- clean_stack_and_phylo[[1]]
+    pruned_tree <- clean_stack_and_phylo[[2]]
+  }
+  
+  # Aggregate SpatialPolygons for regions
+  all_sp_polygons <- do.call(raster::bind, list_sp_regions)
+  
+  # Check CRS matching
+  if (!raster::compareCRS(all_sp_polygons, proba_stack))
+  {
+    all_sp_polygons <- spTransform(x = all_sp_polygons, CRSobj = proba_stack@crs)
+  }
+  
+  # Extract community matrix per regions
+  binary_mat_per_regions <- raster::extract(binary_stack, all_sp_polygons)
+  
+  ### Generate the map of lists for pmap function crossing all argument combination.
+  map_cross <- purrr::cross(list(regional_data = binary_mat_per_regions, diversity_type = diversity_type, index_family = index_family, beta_part = beta_part, aggreg_type = aggreg_type))
+  
+  # Function to revert list structure
+  revert_list_str <- function(ls) 
+  { 
+    # Get sub-elements in same order
+    x <- lapply(ls, `[`, names(ls[[1]]))
+    # Stack and reslice
+    apply(do.call(rbind, x), 2, as.list) 
+  }
+  
+  # Revert list structure
+  map_cross_revert <- revert_list_str(map_cross)
+  # str(map_cross_revert)
+  
+  ### Compute betadiversity values for all regions, all diversity types, all index families, all partitions, and all aggregation types
+  region_values <- purrr::pmap(.l = map_cross_revert, .f = compute_betadiversity, phylo = pruned_tree, verbose = verbose)
+  
+  ### Format ouput
+  
+  # Build final ggplot df
+  within_regions_ggplot_df <- data.frame(regions = rep(x = region_names, length.out = length(map_cross)), diversity_type = unlist(map_cross_revert$diversity_type), index_family = unlist(map_cross_revert$index_family), beta_part = unlist(map_cross_revert$beta_part), aggreg_type = unlist(map_cross_revert$aggreg_type), index_value = unlist(region_values))
+  
+  # Convert into Regions x Indices matrix
+  within_regions_df <- within_regions_ggplot_df %>% 
+    tidyr::pivot_wider(data = ., names_from = c(diversity_type, index_family, beta_part, aggreg_type), names_sep = "_", values_from = index_value)
+  
+  # Print output in the requested format
+  if (output_type == "region_df")
+  {
+    cat(paste0("Indices within regions\n"))
+    print(within_regions_df)
+  }
+  
+  if (output_type == "ggplot_df")
+  {
+    cat(paste0("Indices within regions\n"))
+    print(within_regions_ggplot_df)
+  }
+  
+  ### Produce map(s) of regions with within regions betadiversity values if requested
+  
+  if(regions_map)
+  {
+    # Generate a mask for terrestrial areas to use as background
+    continental_mask <- (calc(proba_stack, fun = sum) >= 0) - 1
+    
+    # Loop per index
+    all_indices_stack <- stack()
+    for (i in 2:ncol(within_regions_df))
+    {
+      # i <- 4
+      
+      # Loop per region
+      index_stack <- stack()
+      for (j in 1:nrow(within_regions_df))
+      {
+        # j <- 1
+        
+        index_stack <- addLayer(index_stack, rasterize(x = list_sp_regions[[j]], 
+                                                       y = continental_mask, # Provide the grid to fill with CRS, bbox and resolution
+                                                       field = as.numeric(within_regions_df[j,i]), # How to fill non empty cells. With the value of a variable in the df of the sp_obj, or directly with a fixed value ?
+                                                       background = NA)) # Value to use to fill empty cells)
+      }
+      # plot(index_stack) 
+      
+      # Aggregate all regions in one layer
+      final_index <- calc(x = index_stack, fun = median, na.rm = T)
+      # Add null values for continental borders
+      final_index_raster <- continental_mask
+      final_index_raster@data@values[!is.na(final_index[])] <- final_index[!is.na(final_index[])]
+      
+      # plot(final_index_raster)
+      
+      # Add the index raster Layer to the final stack
+      all_indices_stack <- addLayer(all_indices_stack, final_index_raster)
+    }
+    
+    # Add index name to each layer
+    # index_names <- stringr::str_split(string = names(within_regions_df)[-1], pattern = "__")
+    # index_names <- lapply(X = index_names, FUN = function (x) {paste0("Diversity type: ", x[1], " ; Family: ", x[2], "\nPartition: ", x[3], " ; Aggregation: ", x[4])})
+    names(all_indices_stack) <- names(within_regions_df)[-1]
+    
+    # Plot Raster Stack with all indices
+    plot(all_indices_stack)
+    
+    # Add plot to the list output (return)
+    final_output <- list(all_indices_stack)
+    
+  }
+  
+  # Export output
+  if (output_type == "region_df")
+  {
+    final_output <- append(list(within_regions_df), final_output)
+    return(final_output)
+  }
+  
+  if (output_type == "ggplot_df")
+  {
+    final_output <- append(list(within_regions_ggplot_df), final_output)
+    return(final_output)
+  }
+  
+  cat(paste0(Sys.time(), " - Within regional Betadiversity Computation - Done\n"))
+}
+
+source(file = "./functions/compute_betadiversity.R")
+
+
+### 18.4.3/ Compute betadiversity within regions ####
+
+# Load spPolygon shape files for bioregions as example
+load(file = "./input_data/Map_stuff/Bioregions/All_bioregions_in_figure.RData")
+
+# list_sp_regions <- list(Caatinga_shp, Mata_Atlantica_shp5)
+# region_names <- c("Caatinga", "Guyana_Shield")
+
+list_sp_regions <- list(Caatinga_shp, Caribbean_Islands_shp, full_CA_shp, Central_Andes_shp, Cerrado_shp, Chacos_shp, Coastal_desert_shp, Guyana_Shield_shp, Llanos_shp, Lower_Amazon_shp, Mata_Atlantica_shp5, Northern_Andes_shp, Pampas_shp, Pantanal_shp, Western_Amazon_shp, Western_Lowlands_shp)
+region_names <- c("Caatinga", "Caribbean_Islands", "Central_America", "Central_Andes", "Cerrado", "Chacos", "Coastal_desert", "Guyana_Shield", "Llanos", "Lower_Amazon", "Mata_Atlantica", "Northern_Andes", "Pampas", "Pantanal", "Western_Amazon", "Western_Lowlands")
+
+# Compute the indices and generate maps
+within_regional_betadiversity <- compute_within_regional_betadiversity(sp_binary_stack, list_sp_regions, region_names,
+                                                                       subsample_size = 10000,
+                                                                       diversity_type = c("taxo", "phylo"),
+                                                                       # diversity_type = c("taxo"),
+                                                                       phylo = phylo, index_family = "sorensen",
+                                                                       beta_part = c("turnover"),
+                                                                       aggreg_type = c("mean_pairwise"),
+                                                                       regions_map = T,
+                                                                       output_type = "region_df",
+                                                                       verbose = T)
+
+View(within_regional_betadiversity[[1]])
+plot(within_regional_betadiversity[[2]])
+
+# Save
+save(within_regional_betadiversity, file = paste0("./outputs/Indices_maps/within_regional_betadiversity.RData"))
+
+### 18.5/ Betadiversity between regions ####
+
+# Compute pairwise betadiversity between regions aggregated as unique sites and provide associated pairwise betadiversity matrices
+
+### 18.5.1/ Function to compute pairwise betadiversity matrix from a sites x species matrix ####
+
+compute_pairwise_betadiversity <- function (regional_data, diversity_type, # "taxo" or "phylo"
+                                            phylo, index_family, # "jaccard" or "sorensen"
+                                            beta_part) # "total", "nestedness" or "turnover"
+{
+  ### Prepare data 
+  
+  # Initiate check for the presence of data
+  no_regional_data <- F
+  
+  # Clean sites with NA
+  regional_data_clean <- na.omit(regional_data) 
+  
+  # Check there are at least two communities with data in the region
+  if (nrow(regional_data_clean) < 2)
+  {
+    no_regional_data <- T
+    beta_value <- NA
+  }
+  
+  ### Compute indices if needed 
+  if (!no_regional_data)
+  {
+    # For taxonomic beta-diversity based on species identity
+    if (diversity_type == "taxo")
+    {
+      # Compute pairwise taxonomic beta-diversity for all pairs of sites
+      beta_results <- betapart::beta.pair(x = regional_data_clean, index.family = index_family)
+    }
+    
+    # For phylogenetic beta-diversity based on Faith's Phylogenetic Diversity
+    if (diversity_type == "phylo")
+    {
+      # Compute pairwise phylogenetic beta-diversity for all pairs of sites
+      beta_results <- betapart::phylo.beta.pair(x = regional_data_clean, tree = phylo, index.family = index_family)
+    }
+    
+    ### Extract results
+    
+    # Depending on the partition of beta-diversity
+    if (beta_part == "turnover") {beta_mat <- as.matrix(beta_results[[1]])}
+    if (beta_part == "nestedness") {beta_mat <- as.matrix(beta_results[[2]])}
+    if (beta_part == "total") {beta_mat <- as.matrix(beta_results[[3]])}
+    
+  }  
+  return(beta_mat)
+}
+
+source(file = "./functions/compute_betadiversity.R")
+
+
+### 18.5.2/ Function to compute betadiversity between regions #### 
+
+compute_pairwise_regional_betadiversity <- function (proba_stack, list_sp_regions, region_names,
+                                                     diversity_type = "taxo",
+                                                     phylo = NULL, index_family = "sorensen",
+                                                     beta_part = "turnover")
+{
+  cat(paste0(Sys.time(), " - Betadiversity Computation - Start\n"))
+  
+  ### Prepare input data
+  
+  ##### Could save computation time by just binarizing within the regions of interest, and not all the study area
+  
+  # Binarize output following probability ranks if needed
+  if (any(!is.element(unique(as.vector(getValues(proba_stack))), c(NA, 0, 1))))
+  {
+    binary_stack <- binarize_output_with_ranks(proba_stack)
+  } else {
+    binary_stack <- proba_stack
+  }
+  
+  # If using the phylogenetic beta-diversity, need to match Raster Stack and phylogeny species lists
+  pruned_tree <- phylo
+  if ("phylo" %in% diversity_type)
+  {
+    # Match raster Stack and Phylogeny species lists
+    clean_stack_and_phylo <- match_stack_and_phylo(binary_stack, phylo)
+    binary_stack <- clean_stack_and_phylo[[1]]
+    pruned_tree <- clean_stack_and_phylo[[2]]
+  }
+  
+  # Aggregate SpatialPolygons for regions
+  all_sp_polygons <- do.call(raster::bind, list_sp_regions)
+  
+  # Check CRS matching
+  if (!raster::compareCRS(all_sp_polygons, proba_stack))
+  {
+    all_sp_polygons <- spTransform(x = all_sp_polygons, CRSobj = proba_stack@crs)
+  }
+  
+  # Extract community matrix per regions
+  binary_mat_per_regions <- raster::extract(binary_stack, all_sp_polygons)
+  
+  # Aggregate regional diversity
+  occ_per_regions <- purrr::map(.x = binary_mat_per_regions, .f = function (x) {apply(X = x, MARGIN = 2, FUN = sum, na.rm = T)}) 
+  PA_per_regions <- purrr::map(.x = occ_per_regions, .f = function (x) {x > 0})
+  binary_per_regions <- purrr::map(.x = PA_per_regions, .f = as.numeric)
+  aggregated_binary_mat <- t(as.data.frame(binary_per_regions))
+  row.names(aggregated_binary_mat) <- region_names
+  colnames(aggregated_binary_mat) <- names(binary_stack)
+  
+  ### Generate the map of lists for pmap function crossing all argument combination.
+  map_cross <- purrr::cross(list(diversity_type = diversity_type, index_family = index_family, beta_part = beta_part))
+  
+  # Function to revert list structure
+  revert_list_str <- function(ls) 
+  { 
+    # Get sub-elements in same order
+    x <- lapply(ls, `[`, names(ls[[1]]))
+    # Stack and reslice
+    apply(do.call(rbind, x), 2, as.list) 
+  }
+  
+  # Revert list structure
+  map_cross_revert <- revert_list_str(map_cross)
+  # str(map_cross_revert)
+  
+  ### Compute betadiversity values for all regions, all diversity type, all index families, all partitions, and all aggregation type
+  pairwise_matrices <- purrr::pmap(.l = map_cross_revert, .f = compute_pairwise_betadiversity, regional_data = aggregated_binary_mat, phylo = pruned_tree)
+  
+  # Format matrix names
+  matrices_names <- purrr::pmap(.l = map_cross_revert, .f = paste, sep = "_")
+  matrices_names <- lapply(X = matrices_names, FUN = stringr::str_split, pattern = "_", simplify = T)
+  matrices_names <- lapply(X = matrices_names, FUN = function (x) {paste0("Diversity type: ", x[,1], " ; Family: ", x[,2], " ; Partition: ", x[,3])})
+  names(pairwise_matrices) <- matrices_names
+  
+  ### Print results
+  cat(paste0("\nPairwise Betadiversity between regions\n\n"))
+  print(pairwise_matrices)
+  
+  # Export
+  return(pairwise_matrices)
+  
+}
+
+source(file = "./functions/compute_betadiversity.R")
+
+### 18.5.3/ Compute pairwise betadiversity between regions ####
+
+pairwise_regional_betadiversity <- compute_pairwise_regional_betadiversity(sp_binary_stack, list_sp_regions, region_names,
+                                                                           diversity_type = c("taxo", "phylo"),
+                                                                           # diversity_type = c("taxo"),
+                                                                           phylo = phylo, index_family = "sorensen",
+                                                                           beta_part = c("turnover"))
+
+pairwise_regional_betadiversity
+
+# Save
+save(pairwise_regional_betadiversity, file = paste0("./outputs/Indices_maps/pairwise_regional_betadiversity.RData"))
+
+
+
+### 18.6/ Make the RGB visualization after NMDS in 3D for the full pairwise approach ####
+
+### 18.6.1/ Function to map pairwise betadiversity with RGB scheme ####
+
+map_pairwise_betadiversity <- function (proba_stack, diversity_type = "taxo",
+                                        phylo = NULL, index_family = "sorensen",
+                                        beta_part = "turnover",
+                                        min_sp = 3, # Minimum number of species to include a community
+                                        subsample_size = NA, # Provide number of pixels to subsample globally and regularly in order to save computing time, especially if phylobetadiversity is computed
+                                        color_space = "3D",
+                                        NMDS_plot = T, RGB_plot = T)
+{
+  ### Prepare data
+  
+  # Subsample sites in a standardized fashion such as density of sampling remains the same for all regions
+  if (!is.na(subsample_size))
+  {
+    proba_stack <- raster::sampleRegular(x = proba_stack, size = subsample_size, asRaster = T)
+  }
+  
+  # If using the phylogenetic beta-diversity, need to match raster Stack and phylogeny species lists
+  if (diversity_type == "phylo")
+  {
+    # Match raster Stack and Phylogeny species lists
+    clean_stack_and_phylo <- match_stack_and_phylo(binary_stack, phylo)
+    binary_stack <- clean_stack_and_phylo[[1]]
+    pruned_tree <- clean_stack_and_phylo[[2]]
+  } else {
+    binary_stack <- proba_stack
+  }
+  
+  # Extract community matrix
+  binary_mat <- raster::getValues(binary_stack)
+  
+  # Remove communities with NA
+  binary_mat_clean_NA <- na.omit(binary_mat)
+  NA_com_indices <- as.numeric(attr(binary_mat_clean_NA, which = "na.action"))
+  # Remove communities with no or less than the minimum species threshold
+  empty_com_indices <- which(!(apply(X = binary_mat, MARGIN = 1, FUN = sum) > min_sp))
+  # Remove both NA and empty communities
+  removed_com_indices <- c(NA_com_indices, empty_com_indices)
+  binary_mat_clean <- binary_mat[-removed_com_indices, ]
+  
+  ### Compute betadiversity with Baselga partitioning between turnover and nestedness
+  
+  # For taxonomical beta-diversity based on species identity
+  if (diversity_type == "taxo")
+  {
+    beta_results <- betapart::beta.pair(x = binary_mat_clean, index.family = index_family)
+  }
+  
+  # For phylogenetic beta-diversity based on Faith's Phylogenetic Diversity
+  if (diversity_type == "phylo")
+  {
+    beta_results <- betapart::phylo.beta.pair(x = binary_mat_clean, tree = pruned_tree, index.family = index_family)
+  }
+  
+  # Depending on the partition of beta-diversity
+  if (beta_part == "turnover") {beta_mat <- as.matrix(beta_results[[1]])}
+  if (beta_part == "nestedness") {beta_mat <- as.matrix(beta_results[[2]])}
+  if (beta_part == "total") {beta_mat <- as.matrix(beta_results[[3]])}
+  
+  ### Convert pairwise beta-diversity matrix into 2D or 3D NMDS
+  
+  # ?metaMDS # NMDS
+  # ?raster::plotRGB
+  
+  if (color_space == "2D") 
+  {
+    NMDS <- vegan::metaMDS(comm = beta_mat, k = 3)
+    
+    # ?recluster.col        # To get coordinates in 2D RGBY color space
+    # ?recluster.plot.col   # To plot in 2D RGBY space
+    
+    
+    
+  }
+  
+  
+  if (color_space == "3D") 
+  {
+    NMDS <- vegan::metaMDS(comm = beta_mat, k = 3)
+    
+    # Scale NMDS output into 0 to 255 range
+    color_data <- apply(X = NMDS$points, MARGIN = 2, FUN = scales::rescale, to = c(0, 255))
+    color_data <- apply(X = color_data, MARGIN = 2, FUN = round)
+    
+    # Add empty sites
+    color_raster_data <- matrix(data = NA, nrow = nrow(binary_mat), ncol = 3)
+    color_raster_data[-removed_com_indices, ] <- color_data
+    colnames(color_raster_data) <- c("Red", "Green", "Blue")
+    
+    # Create template raster Brick
+    RGB_brick <- brick(stack(proba_stack[[1]], proba_stack[[1]], proba_stack[[1]]))
+    names(RGB_brick) <- c("Red", "Green", "Blue")
+    # Fill with data
+    RGB_brick@data@values <- color_raster_data
+    # Convert to raster Stack
+    RGB_stack <- stack(RGB_brick)
+    
+    if(NMDS_plot)
+    {
+      par(mfrow = c(2,2))
+      
+      plot(color_data[, 1:2], type = "n", xlab = "Red Band (NMDS1)", ylab = "Green Band (NMDS2)")
+      points(x = color_data[, 1:2], pch = 16, 
+             col = rgb(red = color_data[, 1], green = color_data[, 2], blue = 0, maxColorValue = 255))
+      
+      plot(color_data[, c(1,3)], type = "n", xlab = "Red Band (NMDS1)", ylab = "Blue Band (NMDS3)")
+      points(x = color_data[, c(1,3)], pch = 16, 
+             col = rgb(red = color_data[, 1], green = 0, blue = color_data[, 3], maxColorValue = 255))
+      
+      plot(color_data[, c(3,2)], type = "n", xlab = "Blue Band (NMDS1)", ylab = "Green Band (NMDS3)")
+      points(x = color_data[, c(3,2)], pch = 16, 
+             col = rgb(red = 0, green = color_data[, 2], blue = color_data[, 3], maxColorValue = 255))
+      
+      ### 3D plot in RGB
+      
+      plot3D::scatter3D(x = color_data[, 1], y =  color_data[, 2], z =  color_data[, 3],
+                        bty = "b2", colkey = FALSE, theta = 45, phi = 25,
+                        ticktype = "detailed",
+                        pch = 16, alpha = 0.7,
+                        colvar = rep(NA, nrow(color_data)),
+                        NAcol = rgb(red = color_data[, 1], green = color_data[, 2], blue = color_data[, 3], maxColorValue = 255),
+                        main = "RGB plot from NMDS", xlab = "\nRed Band",
+                        ylab = "\nGreen Band", zlab = "\nBlue Band")
+      par(mfrow = c(1,1))
+    }
+    
+  }
+  
+  
+  #### Make a better plot with ggplot or tmap or other... ####
+  # Find a way to display the plot when desired
+  
+  ### Add the plot of the NMDS output with the chosen color scheme
+  if (RGB_plot)
+  {
+    red_palette <- colorRampPalette(c("white","red"))(256)
+    green_palette <- colorRampPalette(c("white","green"))(256)
+    blue_palette <- colorRampPalette(c("white","blue"))(256)
+    
+    par(mfrow = c(2,2))
+    
+    image(RGB_stack[[1]], col = red_palette)
+    title(main = "Red band (NMDS1)", cex.main = 1.5, line = 1.5)
+    
+    image(RGB_stack[[2]], col = green_palette, colNA = "aliceblue")
+    title(main = "Green band (NMDS2)", cex.main = 1.5, line = 1.5)
+    
+    image(RGB_stack[[3]], col = blue_palette, colNA = "aliceblue")
+    title(main = "Blue band (NMDS3)", cex.main = 1.5, line = 1.5)
+    
+    plotRGB(RGB_stack, axes = T, main = "RGB Plot", cex.main = 1.5)
+    # title(main = "RGB Plot", cex.main = 1.5, line = 1.5)
+    
+    par(mfrow = c(1,1))
+    
+  }
+  
+  # Export
+  return(RGB_stack)
+}
+
+source(file = "./functions/compute_betadiversity.R")
+
+### 18.6.2/ Map pairwise betadiversity with RGB scheme ####
+
+betadiversity_RGB_map <- map_pairwise_betadiversity(sp_binary_stack, diversity_type = "taxo",
+                                                    phylo = NULL, index_family = "sorensen",
+                                                    beta_part = "turnover",
+                                                    color_space = "3D",
+                                                    min_sp = 3,
+                                                    subsample_size = 5000,
+                                                    RGB_plot = T, NMDS_plot = T)
+
+betaphylodiversity_RGB_map <- map_pairwise_betadiversity(sp_binary_stack, diversity_type = "phylo",
+                                                         phylo = phylogeny_object, index_family = "sorensen",
+                                                         beta_part = "turnover",
+                                                         color_space = "3D",
+                                                         min_sp = 3,
+                                                         subsample_size = 5000,
+                                                         RGB_plot = T, NMDS_plot = T)
+
+plot(betadiversity_RGB_map)
+plotRGB(betadiversity_RGB_map, axes = T, main = "RGB Plot", cex.main = 1.5, colNA = "aliceblue")
+
+plot(betaphylodiversity_RGB_map)
+plotRGB(betaphylodiversity_RGB_map, axes = T, main = "RGB Plot", cex.main = 1.5, colNA = "aliceblue")
+
+# Save
+save(betadiversity_RGB_map, file = paste0("./outputs/Indices_maps/betadiversity_RGB_map.RData"))
+save(betaphylodiversity_RGB_map, file = paste0("./outputs/Indices_maps/betaphylodiversity_RGB_map.RData"))
+
+
+# ### Generate smaller test sets  ###
+# 
+# proba_stack_test <- stack(raster::crop(x = sp_proba_stack, y = extent(-81.5, -77.2, -2.8, 0)))
+# proba_stack_test <- stack(raster::crop(x = sp_proba_stack[[20:29]], y = extent(-106, -80, 0, 22)))
+# plot(proba_stack_test)
+# phylo <- phylogeny_object
+#
+###
+
+
+##### 19/ Map residuals between two indices #####
+
+# Input = two index rasters
+# Output = residuals Y ~ X
+# Need to perform some sort of models to get the equation for the relationship
+# LM on every pixels (Gumbs et al., 2020)
+# GLS with spatial covariance structure (Devictor et al., 2010)
+# GAM on every pixels
+# Extract R² and put it on the map, with the equation
+# Need to subsample to avoid spatial autocorrelation issues: N = 1000 or 1/10th of data
+# Random (multiple time) or regular ?
+
+### 19.1/ Function to compute and map residuals between two indices ####
+
+load(file = paste0("./outputs/Indices_maps/sp_richness.RData"))
+load(file = paste0("./outputs/Indices_maps/Faith_PD.RData"))
+
+x_index <- sp_richness
+y_index <- Faith_PD
+
+library(tidyverse)
+
+map_residuals <- function (y_index, x_index, 
+                           method = "GAM", # Either LM for linear relationship, LM_quadratic to add quadratic effects, or GLS to account for spatial autocorrelation, or GAM to allow non-linear relationship.
+                           corSpatial = "corExp", # To choose the type of spatial autocorrelation structure as in nlme::corSpatial()
+                           subsample_size = NA,  # Number of sites to subsample
+                           subsample_runs = 10,  # Number of random sample runs to aggregate
+                           scatterplot = T,  # To display the scatter plot with regression line and R²
+                           plot_variogram_correlogram = F) # To display the variogram and correlogram in case of spatial GLS
+  
+{
+  y_values <- getValues(y_index)
+  x_values <- getValues(x_index)
+  indices_df_raw <- data.frame(y = y_values, x = x_values)
+  indices_df <- indices_df_raw[apply(X = indices_df_raw, MARGIN = 1, FUN = sum, na.rm = T) > 0, ] # Keep only non-null communities
+  
+  # See what is in common between methods and move it after, outside if
+  
+  if (method == "LM") 
+  {
+    model <- lm(data = indices_df, formula = y ~ x)
+    
+    # Extract residuals
+    resids <- residuals(model)
+    indices_df <- indices_df %>% 
+      mutate(Residuals = resids)
+    
+    # Extract R²
+    R2 <- round(summary(model)$adj.r.squared, 3)
+    
+    # Compute predict
+    predicts <- predict(object = model, newdata = data.frame(x = seq(from = min(x_values, na.rm = T), to = max(x_values, na.rm = T), length.out = 1000)))
+    predicts_df <- data.frame(x = seq(from = min(x_values, na.rm = T), to = max(x_values, na.rm = T), length.out = 1000), y = predicts)
+    
+    # Print output
+    cat(paste0("\nLM for ", names(y_index), " ~ ", names(x_index), ":\n\n"))
+    summary(model)
+  }
+  
+  if (method == "LM_quadratic") 
+  {
+    model <- lm(data = indices_df, formula = y ~ x + I(x^2))
+    
+    # Extract residuals
+    resids <- residuals(model)
+    indices_df <- indices_df %>% 
+      mutate(Residuals = resids)
+    
+    # Extract R²
+    R2 <- round(summary(model)$adj.r.squared, 3)
+    
+    # Compute predict
+    predicts <- predict(object = model, newdata = data.frame(x = seq(from = min(x_values, na.rm = T), to = max(x_values, na.rm = T), length.out = 1000)))
+    predicts_df <- data.frame(x = seq(from = min(x_values, na.rm = T), to = max(x_values, na.rm = T), length.out = 1000), y = predicts)
+    
+    # Print output
+    cat(paste0("\nLM with quadratic effects for ", names(y_index), " ~ ", names(x_index), ":\n\n"))
+    summary(model)
+  }
+  
+  if (method == "GAM")
+  {
+    model <- mgcv::gam(data = indices_df, formula = y ~ s(x))
+    
+    # Extract residuals
+    resids <- residuals(model)
+    indices_df <- indices_df %>% 
+      mutate(Residuals = resids)
+    
+    # Extract R²
+    R2 <- round(summary(model)$r.sq, 3)
+    
+    # Compute predict
+    predicts <- predict(object = model, newdata = data.frame(x = seq(from = min(x_values, na.rm = T), to = max(x_values, na.rm = T), length.out = 1000)))
+    predicts_df <- data.frame(x = seq(from = min(x_values, na.rm = T), to = max(x_values, na.rm = T), length.out = 1000), y = predicts)
+    
+    # Print output
+    cat(paste0("\nGAM for ", names(y_index), " ~ ", names(x_index), ":\n\n"))
+    summary(model)
+  }
+  
+  if (method == "GLS")
+  {
+    # ?nlme::gls
+    # ?nlme::corSpatial
+    # 
+    # ?nlme::corExp # Exponential spatial correlation structure
+    # ?nlme::corLin # Linear spatial correlation structure
+    # ?nlme::corGaus # Gaussian spatial correlation structure = Sinusoidal shape
+    # ?nlme::corSpher # Spherical spatial correlation structure = Exponential structure with distance threshold for plateau
+    # ?nlme::corRatio # Rational quadratic spatial correlation structure = Quadratic shape
+    
+    # Extract coordinates
+    coords <- raster::coordinates(y_index)
+    
+    set.seed(seed = 1)
+    
+    ### Add a loop to do this N times and compute the mean coefficients to avois issue of random sampling ###
+    
+    ### Extract the sampled sites
+    
+    sample_indices <- sample(x = 1:nrow(indices_df), size = subsample_size)
+    sample_df <- indices_df[sample_indices, ]
+    sampled_coords <- coords[sample_indices, ]
+    
+    ### Compute correlation matrix depending on the type of Spatial correlation structure chosen
+    if(corSpatial == "corExp") { corr_matrix <- nlme::corExp(form = ~ sampled_coords[, 1] + sampled_coords[, 2], nugget = TRUE) }
+    if(corSpatial == "corLin") { corr_matrix <- nlme::corLin(form = ~ sampled_coords[, 1] + sampled_coords[, 2], nugget = TRUE) }
+    if(corSpatial == "corGaus") { corr_matrix <- nlme::corGaus(form = ~ sampled_coords[, 1] + sampled_coords[, 2], nugget = TRUE) }
+    if(corSpatial == "corSpher") { corr_matrix <- nlme::corGaus(form = ~ sampled_coords[, 1] + sampled_coords[, 2], nugget = TRUE) }
+    if(corSpatial == "corRatio") { corr_matrix <- nlme::corRatio(form = ~ sampled_coords[, 1] + sampled_coords[, 2], nugget = TRUE) }
+    
+    ### Compute GLS models
+    gls_null_model <- gls(data = sample_df, model = y ~ x + I(x^2))
+    model <- nlme::gls(data = sample_df, model = y ~ x + I(x^2), correlation = corr_matrix)
+    
+    # Extract residuals
+    resids_null <- residuals(gls_null_model)
+    resids <- residuals(model)
+    sample_df <- sample_df %>% 
+      mutate(Residuals = resids)
+    indices_df <- sample_df
+    
+    # Extract R²
+    R2 <- round(performance::r2(model)[[1]], 3)
+    
+    # Compute predict
+    predicts <- predict(object = model, newdata = data.frame(x = seq(from = min(x_values, na.rm = T), to = max(x_values, na.rm = T), length.out = 1000)))
+    predicts_df <- data.frame(x = seq(from = min(x_values, na.rm = T), to = max(x_values, na.rm = T), length.out = 1000), y = predicts)
+    
+    # Print output
+    cat(paste0("\nGLS for ", names(y_index), " ~ ", names(x_index), " with spatial autocorrelation structure:\n\n"))
+    summary(model)
+    
+    ### Plot variogram and correlogram to check fit of the model (only one time)
+    if (plot_variogram_correlogram)
+    {
+      ### Find a way to get the variogram on a plot grid! Recreate them from output ? ###
+      
+      par(mfrow = c(2,2))
+      
+      # Check the fit of the model to the semi-variogram for Pearson residuals
+      gls_variogram <- nlme::Variogram(model, form = ~ sampled_coords[, 1] + sampled_coords[, 2], resType = "pearson")
+      plot(gls_variogram, smooth = TRUE, ylim = c(0, 1.2), main = "Semi-variogram for Pearson residuals")
+      
+      # Check for the absence of trends on the semi-variogram for normalized residuals
+      gls_variogram_norm <- nlme::Variogram(model, form = ~ sampled_coords[, 1] + sampled_coords[, 2], resType = "normalized")
+      plot(gls_variogram_norm, smooth = TRUE, ylim = c(0, 1.2), main = "Semi-variogram for Normalized residuals")
+      
+      # Define bins size
+      sp_dist <- geosphere::distm(sampled_coords, fun = geosphere::distHaversine)/1000
+      bins <- round(x= 1 + 3.3*log(x = max(sp_dist), base = 2), digits = 0) # Struges's rule
+      # bins <- 20
+      increment <- round(max(sp_dist)/bins,0)
+      
+      # ?ncf::correlog
+      
+      # Generate correlogram of residuals for the GLS model
+      gls_correlogram <- ncf::correlog(x = sampled_coords[, 1], y = sampled_coords[, 2], z = resids_null, latlon = T, increment = increment, resamp = 100, na.rm = T, quiet = T)
+      # Plot correlogram for GLS with spatial autocorrelation structure
+      plot(gls_correlogram$mean.of.class[1:10], gls_correlogram$correlation[1:10], type = "b", col = c("black","red")[(gls_correlogram$p > 0.05) + 1], pch = 16, cex = 1, lwd = 1.5, main = "Correlogram for GLS model", xlab = "Distance (km)", ylab = "Moran's I", cex.lab = 1.2, cex.axis = 1) ; abline(h = 0)
+      
+      # Generate correlogram of residuals for the null model
+      gls_correlogram_null <- ncf::correlog(x = sampled_coords[, 1], y = sampled_coords[, 2], z = resids, latlon = T, increment = increment, resamp = 100, na.rm = T, quiet = T)
+      # Plot correlogram for GLS without spatial autocorrelation structure
+      plot(gls_correlogram_null$mean.of.class[1:10], gls_correlogram_null$correlation[1:10], type = "b", col = c("black","red")[(gls_correlogram_null$p > 0.05) + 1], pch = 16, cex = 1, lwd = 1.5, main = "Correlogram for Null model", xlab = "Distance (km)", ylab = "Moran's I", cex.lab = 1.2, cex.axis = 1) ; abline(h=0)
+      
+      par(mfrow = c(1,1))
+    }
+  }
+  
+  if (scatterplot)
+  {
+    # indices_df <- indices_df[sample(x = 1:nrow(indices_df), size = 100), ]
+    
+    g <- ggplot(data = indices_df) +
+      geom_point(data = indices_df, aes(x = x, y = y, color = Residuals), alpha = 0.7, show.legend = T) +
+      geom_line(data = predicts_df, aes(x = x, y = y), size = 1.5, col = "red", linetype = "solid") +
+      
+      # Set limits to display origin
+      xlim(0, max(x_values, na.rm = T)) +
+      ylim(0, max(y_values, na.rm = T)) +
+      
+      # Display R²
+      annotate("text", x = 0.12*max(x_values, na.rm = T), y = 0.95*max(y_values, na.rm = T), label = paste0("R² = ", R2), size = 5, fontface = 2) +
+      
+      # Add legend for predict
+      geom_segment(x = 0.00*max(x_values, na.rm = T), y = 0.88*max(y_values, na.rm = T), xend = 0.10*max(x_values, na.rm = T), yend = 0.88*max(y_values, na.rm = T), color = "#FF000080", alpha = 0.7, size = 1.5) +
+      annotate("text", x = 0.25*max(x_values, na.rm = T), y = 0.88*max(y_values, na.rm = T), label = paste0(method, " predict"), size = 5, fontface = 2) +
+      
+      # Set axis labels
+      ylab(label = names(y_index)) +
+      xlab(label = names(x_index)) +
+      
+      # Set title
+      ggtitle(paste0(names(y_index), " ~ ", names(x_index))) +
+      
+      # Arrange axes limits
+      ggthemes::geom_rangeframe(data = indices_df, aes(x = x, y = y), size = 1.4) +
+      
+      # Set color gradient
+      scale_color_gradient2(low = scales::muted("blue"), high = scales::muted("red")) +
+      
+      # Adjust 
+      theme(panel.background = element_rect(fill = "white"),
+            plot.title = element_text(face = 2, size = 18, hjust = 0.5, margin = margin(t = 5, b = 10)),
+            
+            legend.position = c(0.85, 0.3),
+            legend.background = element_rect(fill = NA, colour = NA),
+            legend.title = element_text(size = 14, vjust = 3, face = "bold"),
+            legend.text = element_text(size = 12, face = "bold"),
+            # # margin = margin(t = 0, unit = "pt")),
+            # # legend.key.size = unit(1.5, 'lines'),
+            # # legend.spacing.y = unit(1,"cm"),
+            
+            axis.line = element_line(size = 1.2),
+            axis.ticks = element_line(size = 1.2),
+            axis.ticks.length = unit(10, "pt"),
+            axis.text = element_text(size = 14, face = "bold"),
+            axis.title = element_text(size = 16, face = "bold"),
+            axis.title.x = element_text(margin = margin(t = 10, b = 5)),
+            axis.title.y = element_text(margin = margin(l = 5, r = 10)))
+    
+    print(g)
+  }
+  
+  ### Predict values for all cells
+  predicts_raster <- predict(object = model, newdata = indices_df_raw)
+  
+  ### Put predicts in a Raster Layer
+  pred.raster <- Ithomiini.range.raster
+  pred.raster[!is.na(pred.raster[])] <- pred_net.FPD
+  
+  ### Compute residuals
+  
+  
+  ### Export
+  
+  
+  ## Test to see if the predictions need the correlation structure need to be taken in account. Answer : NO !
+  
+  load(file = paste0(internal.wd, "/Maps_exploitation/Ithomiini_range_raster.RData"))
+  ?predict.gls
+  
+  # Generate newdata df
+  newdata <-  data.frame(sp.richness[]) ; names(newdata) <- "sample.sp.richness"
+  newdata$sample.FPD <- PD.raster[]
+  newdata <- newdata[!is.na(Ithomiini.range.raster[]),] # Remove NA
+  
+  # Extract projected coords of all non NA pixels
+  full_coords <- coordinates(Ithomiini.range.raster)[!is.na(Ithomiini.range.raster[]),]
+  full_coords_Spobj <- SpatialPoints(full_coords, proj4string = Ithomiini.range.raster@crs)
+  full_coords_Spobj <- spTransform(full_coords_Spobj, CRS("+proj=utm +zone=20 +ellps=WGS84 +datum=WGS84 +units=km +no_defs")) # Exemple de projection : "+proj=longlat" pour le WGS84
+  proj_full_coords <- full_coords_Spobj@coords
+  
+  ?predict.gls
+  pred_net.FPD <- predict(object = m1, newdata = newdata, correlation = corExp(form = ~ full_coords[,1] + full_coords[,2]))
+  pred_net.FPD_2 <- predict(object = m1, newdata = newdata)
+  sum(pred_net.FPD_2 - pred_net.FPD)
+  
+  pred.raster <- Ithomiini.range.raster
+  pred.raster[!is.na(pred.raster[])] <- pred_net.FPD
+  
+  # Aucune différence ! La structure de correlation n'est prise en compte que pour l'estimation des paramètres, mais pas pour les prédictions par la suite...
+  
+  ### Direct predictions of net values from model coefs
+  
+  ### Predict for all cells
+  
+  ### Put predicts back in a Raster Layer
+  
+}
+
+##### 20/ Map SES-values #####
+
+### 20.1/ SES-PD according to SR ####
+
+# SES-tests to account for deviance (Leprieur et al., 2012 ; Rosauer & Jetz, 2014). 
+# Need to design a specific one for each case depending on the null model for randomization
+# For PD vs. SR => randomize names in the phylogeny before recomputing PD
+# For mimetic richness vs. SR => randomize mimicry membership and recompute mimicry richness
+# Option for th output 
+# Report the SES value normalized according to the mean and sd of the null distribution
+# Report the quantile
+
+
+###### Improvements for every functions ######
+
+# Change function names to better distinguish map (output = raster) and compute (output = matrix or table) functions
+
+# Check with calc
+
+# If not work use the getValues and loop method
+
+# Check purrr or apply instead of loop ?
+
+# Computation by blocks instead of loading everything, such as in raster package...
+
+# Parallelize heavy loops
