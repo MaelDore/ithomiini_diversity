@@ -276,7 +276,7 @@ map_residuals <- function (y_index, x_index,
 
 
 map_residuals_within_regions <- function (y_index, x_index, 
-                                          list_sp_regions, # Provide region Spatial Polygon to define borders
+                                          list_shp_regions, # Provide region Spatial Polygon to define borders
                                           method = "GAM", # Either LM for linear relationship, LM_quadratic to add quadratic effects, or GLS to account for spatial autocorrelation, or GAM to allow non-linear relationship.
                                           corSpatial = "corExp", # To choose the type of spatial autocorrelation structure as in nlme::corSpatial() for GLS
                                           include_model = F, # To include the fitted model in the output
@@ -284,10 +284,12 @@ map_residuals_within_regions <- function (y_index, x_index,
                                           plot_variogram_correlogram = F) # To display the variogram and correlogram in case of spatial GLS
   
 {
-  y_values <- sapply(X = list_sp_regions, FUN = raster::extract, x = y_index)
+  y_values <- sapply(X = list_shp_regions, FUN = raster::extract, x = y_index)
+  y_values <- lapply(X = y_values, FUN = unlist) # Step useful if multiple polygons for one region
   y_values_regions <- round(unlist(lapply(X = y_values, FUN = median, na.rm = T)),3)
   
-  x_values <- sapply(X = list_sp_regions, FUN = raster::extract, x = x_index)
+  x_values <- sapply(X = list_shp_regions, FUN = raster::extract, x = x_index)
+  x_values <- lapply(X = x_values, FUN = unlist) # Step useful if multiple polygons for one region
   x_values_regions <- round(unlist(lapply(X = x_values, FUN = median, na.rm = T)),3)
   
   indices_df <- data.frame(y = y_values_regions, x = x_values_regions)
@@ -341,9 +343,15 @@ map_residuals_within_regions <- function (y_index, x_index,
     # ?nlme::corSpher # Spherical spatial correlation structure = Exponential structure with distance threshold for plateau
     # ?nlme::corRatio # Rational quadratic spatial correlation structure = Quadratic shape
     
-    # Extract coordinates of the centroid of regions
-    all_sp_polygons <- do.call(raster::bind, list_sp_regions)
-    centroids_coords <- rgeos::gCentroid(spgeom = all_sp_polygons, byid=TRUE)@coords
+    ### Extract coordinates of regions centroids
+    centroids_coords <- lapply(X = list_shp_regions, FUN = rgeos::gCentroid, byid=FALSE)
+    centroids_coords <- lapply(X = centroids_coords, FUN = function (x) { x@coords })
+    centroids_coords <- do.call(what = "rbind", args = centroids_coords)
+    row.names(centroids_coords) <- region_names
+    
+    # # Version when regions all have a single polygon
+    # all_shp_polygons <- do.call(raster::bind, list_shp_regions)
+    # centroids_coords <- rgeos::gCentroid(spgeom = all_shp_polygons, byid=TRUE)@coords
     
     set.seed(seed = 1)
     
@@ -492,11 +500,11 @@ map_residuals_within_regions <- function (y_index, x_index,
   # Initiate stack per region
   region_stack <- stack()
   # Loop per region
-  for (i in 1:length(list_sp_regions))
+  for (i in 1:length(list_shp_regions))
   {
     # i <- 1
     
-    region_stack <- addLayer(region_stack, rasterize(x = list_sp_regions[[i]], 
+    region_stack <- addLayer(region_stack, rasterize(x = list_shp_regions[[i]], 
                                                      y = continental_mask, # Provide the grid to fill with CRS, bbox and resolution
                                                      field = residuals_regions[i], # How to fill non empty cells. With the value of a variable in the df of the sp_obj, or directly with a fixed value ?
                                                      background = NA)) # Value to use to fill empty cells)

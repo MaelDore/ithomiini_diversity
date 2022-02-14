@@ -1836,7 +1836,7 @@ source(file = "./functions/compute_betadiversity.R")
 
 # Compute betadiversity across all pixels/sites of each region, and eventually map them
 
-compute_within_regional_betadiversity <- function (proba_stack, list_sp_regions, region_names,
+compute_within_regional_betadiversity <- function (proba_stack, list_shp_regions, region_names,
                                                    subsample_size = NA, # Provide number of pixels to subsample globally and regularly in order to save computing time, especially if phylobetadiversity is computed
                                                    diversity_type = "taxo",
                                                    phylo = NULL, index_family = "sorensen",
@@ -1875,17 +1875,48 @@ compute_within_regional_betadiversity <- function (proba_stack, list_sp_regions,
     pruned_tree <- clean_stack_and_phylo[[2]]
   }
   
-  # Aggregate SpatialPolygons for regions
-  all_sp_polygons <- do.call(raster::bind, list_sp_regions)
-  
-  # Check CRS matching
-  if (!raster::compareCRS(all_sp_polygons, proba_stack))
+  # Add region names to each SpPolygonsDF
+  for (i in 1: length(list_shp_regions))
   {
-    all_sp_polygons <- spTransform(x = all_sp_polygons, CRSobj = proba_stack@crs)
+    n_poly <- nrow(list_shp_regions[[i]]@data)
+    list_shp_regions[[i]]@data <- cbind(list_shp_regions[[i]]@data, data.frame("region" = rep(region_names[i], times = n_poly)))
   }
   
-  # Extract community matrix per regions
-  binary_mat_per_regions <- raster::extract(binary_stack, all_sp_polygons)
+  # Check CRS matching between shp files and Raster Stack and project if necessary
+  for (i in 1:length(list_shp_regions))
+  {
+    CRS_check <- raster::compareCRS(list_shp_regions[[i]], proba_stack)
+    if(!CRS_check)
+    {
+      list_shp_regions[[i]] <- spTransform(x = list_shp_regions[[i]], CRSobj = proba_stack@crs)
+    }
+  }
+  
+  # Aggregate SpatialPolygons in a single shape file
+  all_shp_polygons <- do.call(raster::bind, list_shp_regions)
+
+  # all_shp_polygons@data
+  
+  # Extract community matrix per polygons
+  binary_mat_per_polygons <- raster::extract(binary_stack, all_shp_polygons)
+
+  # Aggregate per regions (in case some regions encompass multiple polygons)
+  binary_mat_per_regions <- list()
+  for (i in 1:length(region_names))
+  {
+    # i <- 2
+    region <- region_names[i]
+    polygon_indices <- which(region == all_shp_polygons@data$region)
+    
+    binary_mat_per_regions[[i]] <- do.call(what = "rbind", args = binary_mat_per_polygons[polygon_indices])
+  }
+  
+  # ### Version if all regions have a single polygon
+  # all_shp_polygons <- do.call(raster::bind, list_shp_regions)
+  # binary_mat_per_regions <- raster::extract(binary_stack, all_shp_polygons)
+  
+  ###### Need to check if no more issue with all_shp_polygons !!! #####
+  ## Copy-paste the section with CRS checking and data aggregation per region
   
   ### Generate the map of lists for pmap function crossing all argument combination.
   map_cross <- purrr::cross(list(regional_data = binary_mat_per_regions, diversity_type = diversity_type, index_family = index_family, beta_part = beta_part, aggreg_type = aggreg_type))
@@ -1911,9 +1942,10 @@ compute_within_regional_betadiversity <- function (proba_stack, list_sp_regions,
   # Build final ggplot df
   within_regions_ggplot_df <- data.frame(regions = rep(x = region_names, length.out = length(map_cross)), diversity_type = unlist(map_cross_revert$diversity_type), index_family = unlist(map_cross_revert$index_family), beta_part = unlist(map_cross_revert$beta_part), aggreg_type = unlist(map_cross_revert$aggreg_type), index_value = unlist(region_values))
   
-  # Convert into Regions x Indices matrix
+  # Convert into Regions x Indices df
   within_regions_df <- within_regions_ggplot_df %>% 
-    tidyr::pivot_wider(data = ., names_from = c(diversity_type, index_family, beta_part, aggreg_type), names_sep = "_", values_from = index_value)
+    tidyr::pivot_wider(data = ., names_from = c(diversity_type, index_family, beta_part, aggreg_type), names_sep = "_", values_from = index_value) %>% 
+    as.data.frame(.)
   
   # Print output in the requested format
   if (output_type == "region_df")
@@ -1947,7 +1979,7 @@ compute_within_regional_betadiversity <- function (proba_stack, list_sp_regions,
       {
         # j <- 1
         
-        index_stack <- addLayer(index_stack, rasterize(x = list_sp_regions[[j]], 
+        index_stack <- addLayer(index_stack, rasterize(x = list_shp_regions[[j]], 
                                                        y = continental_mask, # Provide the grid to fill with CRS, bbox and resolution
                                                        field = as.numeric(within_regions_df[j,i]), # How to fill non empty cells. With the value of a variable in the df of the sp_obj, or directly with a fixed value ?
                                                        background = NA)) # Value to use to fill empty cells)
@@ -2008,19 +2040,19 @@ source(file = "./functions/compute_betadiversity.R")
 # Load spPolygon shape files for bioregions as example
 load(file = "./input_data/Map_stuff/Bioregions/All_bioregions_in_figure.RData")
 
-# list_sp_regions <- list(Caatinga_shp, Guyana_Shield_shp)
+# list_shp_regions <- list(Caatinga_shp, Guyana_Shield_shp)
 # region_names <- c("Caatinga", "Guyana_Shield")
 
-# list_sp_regions <- list(Central_Andes_shp, Western_Amazon_shp)
+# list_shp_regions <- list(Central_Andes_shp, Western_Amazon_shp)
 # region_names <- c("Central Andes", "Western Amazon")
 
 plot(binary_stack)
 
-list_sp_regions <- list(Caatinga_shp, Caribbean_Islands_shp, full_CA_shp, Central_Andes_shp, Cerrado_shp, Chacos_shp, Coastal_desert_shp, Guyana_Shield_shp, Llanos_shp, Lower_Amazon_shp, Mata_Atlantica_shp5, Northern_Andes_shp, Pampas_shp, Pantanal_shp, Western_Amazon_shp, Western_Lowlands_shp)
+list_shp_regions <- list(Caatinga_shp, Caribbean_Islands_shp, full_CA_shp, Central_Andes_shp, Cerrado_shp, Chacos_shp, Coastal_desert_shp, Guyana_Shield_shp, Llanos_shp, Lower_Amazon_shp, Mata_Atlantica_shp5, Northern_Andes_shp, Pampas_shp, Pantanal_shp, Western_Amazon_shp, Western_Lowlands_shp)
 region_names <- c("Caatinga", "Caribbean_Islands", "Central_America", "Central_Andes", "Cerrado", "Chacos", "Coastal_desert", "Guyana_Shield", "Llanos", "Lower_Amazon", "Mata_Atlantica", "Northern_Andes", "Pampas", "Pantanal", "Western_Amazon", "Western_Lowlands")
 
 # Compute the indices and generate maps
-within_regional_betadiversity <- compute_within_regional_betadiversity(sp_binary_stack, list_sp_regions, region_names,
+within_regional_betadiversity <- compute_within_regional_betadiversity(sp_binary_stack, list_shp_regions, region_names,
                                                                        subsample_size = 10000,
                                                                        diversity_type = c("taxo", "phylo"),
                                                                        # diversity_type = c("taxo"),
@@ -2101,7 +2133,7 @@ source(file = "./functions/compute_betadiversity.R")
 
 ### 18.5.2/ Function to compute betadiversity between regions #### 
 
-compute_pairwise_regional_betadiversity <- function (proba_stack, list_sp_regions, region_names,
+compute_pairwise_regional_betadiversity <- function (proba_stack, list_shp_regions, region_names,
                                                      diversity_type = "taxo",
                                                      phylo = NULL, index_family = "sorensen",
                                                      beta_part = "turnover")
@@ -2130,17 +2162,45 @@ compute_pairwise_regional_betadiversity <- function (proba_stack, list_sp_region
     pruned_tree <- clean_stack_and_phylo[[2]]
   }
   
-  # Aggregate SpatialPolygons for regions
-  all_sp_polygons <- do.call(raster::bind, list_sp_regions)
-  
-  # Check CRS matching
-  if (!raster::compareCRS(all_sp_polygons, proba_stack))
+  # Add region names to each SpPolygonsDF
+  for (i in 1: length(list_shp_regions))
   {
-    all_sp_polygons <- spTransform(x = all_sp_polygons, CRSobj = proba_stack@crs)
+    n_poly <- nrow(list_shp_regions[[i]]@data)
+    list_shp_regions[[i]]@data <- cbind(list_shp_regions[[i]]@data, data.frame("region" = rep(region_names[i], times = n_poly)))
   }
   
-  # Extract community matrix per regions
-  binary_mat_per_regions <- raster::extract(binary_stack, all_sp_polygons)
+  # Check CRS matching between shp files and Raster Stack and project if necessary
+  for (i in 1:length(list_shp_regions))
+  {
+    CRS_check <- raster::compareCRS(list_shp_regions[[i]], proba_stack)
+    if(!CRS_check)
+    {
+      list_shp_regions[[i]] <- spTransform(x = list_shp_regions[[i]], CRSobj = proba_stack@crs)
+    }
+  }
+  
+  # Aggregate SpatialPolygons in a single shp file
+  all_shp_polygons <- do.call(raster::bind, list_shp_regions)
+  
+  # all_shp_polygons@data
+  
+  # Extract community matrix per polygons
+  binary_mat_per_polygons <- raster::extract(binary_stack, all_shp_polygons)
+  
+  # Aggregate per regions (in case some regions encompass multiple polygons)
+  binary_mat_per_regions <- list()
+  for (i in 1:length(region_names))
+  {
+    # i <- 2
+    region <- region_names[i]
+    polygon_indices <- which(region == all_shp_polygons@data$region)
+    
+    binary_mat_per_regions[[i]] <- do.call(what = "rbind", args = binary_mat_per_polygons[polygon_indices])
+  }  
+  
+  # ### Version if all regions have a single polygon
+  # all_shp_polygons <- do.call(raster::bind, list_shp_regions)
+  # binary_mat_per_regions <- raster::extract(binary_stack, all_shp_polygons)
   
   # Aggregate regional diversity
   occ_per_regions <- purrr::map(.x = binary_mat_per_regions, .f = function (x) {apply(X = x, MARGIN = 2, FUN = sum, na.rm = T)}) 
@@ -2188,7 +2248,7 @@ source(file = "./functions/compute_betadiversity.R")
 
 ### 18.5.3/ Compute pairwise betadiversity between regions ####
 
-pairwise_regional_betadiversity <- compute_pairwise_regional_betadiversity(sp_binary_stack, list_sp_regions, region_names,
+pairwise_regional_betadiversity <- compute_pairwise_regional_betadiversity(sp_binary_stack, list_shp_regions, region_names,
                                                                            diversity_type = c("taxo", "phylo"),
                                                                            # diversity_type = c("taxo"),
                                                                            phylo = phylo, index_family = "sorensen",
@@ -2215,7 +2275,7 @@ map_betadiversity_within_and_between_regions <- function (
   # If indices are already computed
   region_df_within = NULL,   # To provide directly the df with indices values within each region. 2 columns: the region names, the index values
   region_matrix_between = NULL,  # To provide directly the matrix of betadiversity values between regions
-  list_sp_regions, # To provide the list of SpatialPolygons of regions to extract centroid coordinates
+  list_shp_regions, # To provide the list of SpatialPolygons of regions to extract centroid coordinates
   region_names, # To provide the names of regions
   region_labels = NULL, # To provide labels to use instead of full region names
   
@@ -2230,8 +2290,8 @@ map_betadiversity_within_and_between_regions <- function (
   
   # Plot options
   plot_type = "ggplot", # To select for plot type between "ggplot" and "igraph"
-  nod_cex = 50, # To adjust nod size
-  edge_cex = 5) # To adjust edge width
+  nod_cex = 40, # To adjust nod size
+  edge_cex = 1) # To adjust edge width
 {
   # Check that there is only one index computed at once
   if(any(!(lapply(X = list(index_family, beta_part, aggreg_type), FUN = length) == 1)))
@@ -2246,7 +2306,7 @@ map_betadiversity_within_and_between_regions <- function (
     
     # Compute within region betadiversity if not provided
     region_df_within <- compute_within_regional_betadiversity(proba_stack = proba_stack,
-                                                              list_sp_regions = list_sp_regions,
+                                                              list_shp_regions = list_shp_regions,
                                                               region_names = region_names,
                                                               subsample_size = subsample_size,
                                                               diversity_type = diversity_type,
@@ -2267,7 +2327,7 @@ map_betadiversity_within_and_between_regions <- function (
     
     # Compute between regions betadiversity if not provided
     region_matrix_between <- compute_pairwise_regional_betadiversity(proba_stack = proba_stack,
-                                                                     list_sp_regions = list_sp_regions,
+                                                                     list_shp_regions = list_shp_regions,
                                                                      region_names = region_names,
                                                                      diversity_type = diversity_type,
                                                                      phylo = phylo,
@@ -2277,6 +2337,7 @@ map_betadiversity_within_and_between_regions <- function (
   }
   
   ### Format region_df_within
+  region_df_within <- as.data.frame(region_df_within)
   row.names(region_df_within) <- region_names <- region_df_within$regions
   region_df_within <- region_df_within[, 2, drop = F]
   names(region_df_within) <- "BetaDiversity_within"
@@ -2301,16 +2362,22 @@ map_betadiversity_within_and_between_regions <- function (
   # Clean out regions with no data
   region_df_within <- region_df_within[!check_NaN, , drop = F]
   region_matrix_between <- region_matrix_between[!check_NaN, !check_NaN]
-  list_sp_regions <- list_sp_regions[!check_NaN]
+  list_shp_regions <- list_shp_regions[!check_NaN]
   region_names <- region_names[!check_NaN]
   region_labels <- region_labels[!check_NaN]
   
+  ### Aggregate all polygons in a single shape file
+  all_shp_polygons <- do.call(raster::bind, list_shp_regions)
   
   ### Extract coordinates of regions centroids
-  all_sp_polygons <- do.call(raster::bind, list_sp_regions)
-  
-  regions_centroids <- rgeos::gCentroid(spgeom = all_sp_polygons, byid=TRUE)@coords
+  regions_centroids <- lapply(X = list_shp_regions, FUN = rgeos::gCentroid, byid=FALSE)
+  regions_centroids <- lapply(X = regions_centroids, FUN = function (x) { x@coords })
+  regions_centroids <- do.call(what = "rbind", args = regions_centroids)
   row.names(regions_centroids) <- region_names
+  
+  # # Version when regions all have a single polygon
+  # regions_centroids <- rgeos::gCentroid(spgeom = all_shp_polygons, byid=TRUE)@coords
+
   
   ### Build interaction graph
   
@@ -2357,7 +2424,11 @@ map_betadiversity_within_and_between_regions <- function (
   if (plot_type == "ggplot")
   {
     # Convert sp to sf
-    all_sf_polygons <- sf::st_as_sf(x = all_sp_polygons)
+    all_sf_polygons <- sf::st_as_sf(x = all_shp_polygons)
+    
+    # # Extract network info
+    # network_plot <- ggraph::ggraph(network, layout = regions_centroids)
+    # network_info <- ggraph::get_edges("short")(network_plot)
     
     # GGplot
     network_plot <- ggraph::ggraph(network, layout = regions_centroids) + 
@@ -2365,9 +2436,14 @@ map_betadiversity_within_and_between_regions <- function (
       # Plot background map
       geom_sf(data = all_sf_polygons) +
       
+      # # Plot edges
+      # geom_edge_link(aes(colour = network_info$weight,
+      #                    width = network_info$weight*edge_cex),
+      #                alpha = 0.8) +
+      
       # Plot edges
-      geom_edge_link(aes(colour = test$weight,
-                         width = test$weight*edge_cex),
+      geom_edge_link(aes(colour = weight,
+                         width = weight),
                      alpha = 0.8) +
       
       # Legends for nods/vertex
@@ -2376,7 +2452,7 @@ map_betadiversity_within_and_between_regions <- function (
                                  high = "cornflowerblue",
                                  na.value = "grey50") +
       
-      scale_edge_width_continuous(range = c(0.2, 4)) +
+      scale_edge_width_continuous(range = c(0.2, 4*edge_cex)) +
       
       # Plot nods/vertex
       geom_node_point(aes(fill = region_df_within$BetaDiversity_within,
@@ -2386,6 +2462,8 @@ map_betadiversity_within_and_between_regions <- function (
                       alpha = 0.8) +
       # Plot nods/vertex labels
       geom_node_text(aes(label = region_labels), col = "black") +
+      
+      # scale_size_continuous(range = c(0.2, 8*nod_cex)) +
       
       # Legends for nods/vertex
       scale_fill_gradient(name = "Within BD",
@@ -2418,7 +2496,7 @@ edge_cex <- 1
 
 # Load spPolygon shape files for bioregions as example
 load(file = "./input_data/Map_stuff/Bioregions/All_bioregions_in_figure.RData")
-list_sp_regions <- list(Caatinga_shp, Caribbean_Islands_shp, full_CA_shp, Central_Andes_shp, Cerrado_shp, Chacos_shp, Coastal_desert_shp, Guyana_Shield_shp, Llanos_shp, Lower_Amazon_shp, Mata_Atlantica_shp5, Northern_Andes_shp, Pampas_shp, Pantanal_shp, Western_Amazon_shp, Western_Lowlands_shp)
+list_shp_regions <- list(Caatinga_shp, Caribbean_Islands_shp, full_CA_shp, Central_Andes_shp, Cerrado_shp, Chacos_shp, Coastal_desert_shp, Guyana_Shield_shp, Llanos_shp, Lower_Amazon_shp, Mata_Atlantica_shp5, Northern_Andes_shp, Pampas_shp, Pantanal_shp, Western_Amazon_shp, Western_Lowlands_shp)
 region_names <- c("Caatinga", "Caribbean_Islands", "Central_America", "Central_Andes", "Cerrado", "Chacos", "Coastal_desert", "Guyana_Shield", "Llanos", "Lower_Amazon", "Mata_Atlantica", "Northern_Andes", "Pampas", "Pantanal", "Western_Amazon", "Western_Lowlands")
 region_labels <- c("Ca", "CIs", "CAm", "CAn", "Ce", "Ch", "CD", "GS", "Ll", "LA", "MA", "NAn", "Pam", "Pan", "UA", "WL")
 
@@ -2435,7 +2513,7 @@ region_df_between_phylo <- pairwise_regional_betadiversity[[2]]
 # Plot
 map_betadiversity_within_and_between_regions (region_df_within = region_df_within_phylo,   # To provide directly the df with indices values within each region. 2 columns: the region names, the index values
                                               region_matrix_between = region_df_between_phylo,  # To provide directly the matrix of betadiversity values between regions
-                                              list_sp_regions, # To provide the list of SpatialPolygons of regions to extract centroid coordinates
+                                              list_shp_regions, # To provide the list of SpatialPolygons of regions to extract centroid coordinates
                                               region_labels = region_labels, # To provide labels to use instead of full region names
                                               nod_cex = 50,
                                               edge_cex = 12,
@@ -2443,7 +2521,7 @@ map_betadiversity_within_and_between_regions (region_df_within = region_df_withi
 
 map_betadiversity_within_and_between_regions (region_df_within = region_df_within_taxo,   # To provide directly the df with indices values within each region. 2 columns: the region names, the index values
                                               region_matrix_between = region_df_between_taxo,  # To provide directly the matrix of betadiversity values between regions
-                                              list_sp_regions, # To provide the list of SpatialPolygons of regions to extract centroid coordinates
+                                              list_shp_regions, # To provide the list of SpatialPolygons of regions to extract centroid coordinates
                                               region_labels = region_labels, # To provide labels to use instead of full region names
                                               nod_cex = 30,
                                               edge_cex = 12,
@@ -2958,7 +3036,7 @@ load(file = paste0("./outputs/Indices_maps/TBD_PBD_residuals.RData"))
 # 19.3.1/ Function to compute residuals within regions
 
 map_residuals_within_regions <- function (y_index, x_index, 
-                                          list_sp_regions, # Provide region Spatial Polygon to define borders
+                                          list_shp_regions, # Provide region Spatial Polygon to define borders
                                           method = "GAM", # Either LM for linear relationship, LM_quadratic to add quadratic effects, or GLS to account for spatial autocorrelation, or GAM to allow non-linear relationship.
                                           corSpatial = "corExp", # To choose the type of spatial autocorrelation structure as in nlme::corSpatial() for GLS
                                           include_model = F, # To include the fitted model in the output
@@ -2966,10 +3044,12 @@ map_residuals_within_regions <- function (y_index, x_index,
                                           plot_variogram_correlogram = F) # To display the variogram and correlogram in case of spatial GLS
   
 {
-  y_values <- sapply(X = list_sp_regions, FUN = raster::extract, x = y_index)
+  y_values <- sapply(X = list_shp_regions, FUN = raster::extract, x = y_index)
+  y_values <- lapply(X = y_values, FUN = unlist) # Step useful if multiple polygons for one region
   y_values_regions <- round(unlist(lapply(X = y_values, FUN = median, na.rm = T)),3)
   
-  x_values <- sapply(X = list_sp_regions, FUN = raster::extract, x = x_index)
+  x_values <- sapply(X = list_shp_regions, FUN = raster::extract, x = x_index)
+  x_values <- lapply(X = x_values, FUN = unlist) # Step useful if multiple polygons for one region
   x_values_regions <- round(unlist(lapply(X = x_values, FUN = median, na.rm = T)),3)
   
   indices_df <- data.frame(y = y_values_regions, x = x_values_regions)
@@ -3023,9 +3103,15 @@ map_residuals_within_regions <- function (y_index, x_index,
     # ?nlme::corSpher # Spherical spatial correlation structure = Exponential structure with distance threshold for plateau
     # ?nlme::corRatio # Rational quadratic spatial correlation structure = Quadratic shape
     
-    # Extract coordinates of the centroid of regions
-    all_sp_polygons <- do.call(raster::bind, list_sp_regions)
-    centroids_coords <- rgeos::gCentroid(spgeom = all_sp_polygons, byid=TRUE)@coords
+    ### Extract coordinates of regions centroids
+    centroids_coords <- lapply(X = list_shp_regions, FUN = rgeos::gCentroid, byid=FALSE)
+    centroids_coords <- lapply(X = centroids_coords, FUN = function (x) { x@coords })
+    centroids_coords <- do.call(what = "rbind", args = centroids_coords)
+    row.names(centroids_coords) <- region_names
+    
+    # # Version when regions all have a single polygon
+    # all_shp_polygons <- do.call(raster::bind, list_shp_regions)
+    # centroids_coords <- rgeos::gCentroid(spgeom = all_shp_polygons, byid=TRUE)@coords
     
     set.seed(seed = 1)
     
@@ -3174,11 +3260,11 @@ map_residuals_within_regions <- function (y_index, x_index,
   # Initiate stack per region
   region_stack <- stack()
   # Loop per region
-  for (i in 1:length(list_sp_regions))
+  for (i in 1:length(list_shp_regions))
   {
     # i <- 1
     
-    region_stack <- addLayer(region_stack, rasterize(x = list_sp_regions[[i]], 
+    region_stack <- addLayer(region_stack, rasterize(x = list_shp_regions[[i]], 
                                                      y = continental_mask, # Provide the grid to fill with CRS, bbox and resolution
                                                      field = residuals_regions[i], # How to fill non empty cells. With the value of a variable in the df of the sp_obj, or directly with a fixed value ?
                                                      background = NA)) # Value to use to fill empty cells)
@@ -3216,7 +3302,7 @@ PBD_within_regions <- within_regional_betadiversity[[2]][[2]]
 # Compute
 PBD_TBD_regions_residuals <- map_residuals_within_regions (y_index = PBD_within_regions,
                                                            x_index = TBD_within_regions, 
-                                                           list_sp_regions, # Provide region Spatial Polygon to define borders
+                                                           list_shp_regions, # Provide region Spatial Polygon to define borders
                                                            method = "GAM", # Either LM for linear relationship, LM_quadratic to add quadratic effects, or GLS to account for spatial autocorrelation, or GAM to allow non-linear relationship.
                                                            corSpatial = "corExp", # To choose the type of spatial autocorrelation structure as in nlme::corSpatial() for GLS
                                                            include_model = F, # To include the fitted model in the output
@@ -3690,7 +3776,7 @@ save(SES_PBD_vs_TBD, file = paste0("./outputs/Indices_maps/SES_PBD_vs_TBD.RData"
 ### 20.3.1/ Function to compute SES-PBD according to TBD within regions ####
 
 
-compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_sp_regions, region_names,
+compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_shp_regions, region_names,
                                                    subsample_size = NA, # Provide number of pixels to subsample globally and regularly in order to save computing time
                                                    phylo, # Provide the phylogeny
                                                    index_family = "sorensen", # Chose the family of Beta-diversity indices
@@ -3730,7 +3816,7 @@ compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_sp_regions,
   # Compute observed PBD within regions
   cat(paste0(Sys.time(), " - Compute observed PhyloBetaDiversity in a moving window within regions\n"))
   
-  PBD_obs_results <- compute_within_regional_betadiversity(binary_stack, list_sp_regions = list_sp_regions, region_names = region_names,
+  PBD_obs_results <- compute_within_regional_betadiversity(binary_stack, list_shp_regions = list_shp_regions, region_names = region_names,
                                                            subsample_size = subsample_size,
                                                            diversity_type = "phylo",
                                                            phylo = pruned_tree, index_family = index_family,
@@ -3756,7 +3842,7 @@ compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_sp_regions,
     random_phylo$tip.label <- sample(random_phylo$tip.label)
     
     # Compute PBD for this randomized phylogeny
-    random_region_df <- compute_within_regional_betadiversity(binary_stack, list_sp_regions = list_sp_regions, region_names = region_names,
+    random_region_df <- compute_within_regional_betadiversity(binary_stack, list_shp_regions = list_shp_regions, region_names = region_names,
                                                               subsample_size = subsample_size,
                                                               diversity_type = "phylo",
                                                               phylo = random_phylo, index_family = index_family,
@@ -3792,7 +3878,7 @@ compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_sp_regions,
   }
   # Clean out regions with no data
   region_indices_df <- region_indices_df[!check_NaN, ]
-  list_sp_regions <- list_sp_regions[!check_NaN]
+  list_shp_regions <- list_shp_regions[!check_NaN]
   region_names <- region_names[!check_NaN]
   
   
@@ -3879,26 +3965,37 @@ compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_sp_regions,
   
   ### Generate rasters
   
+  # Add region names to each SpPolygonsDF
+  for (i in 1: length(list_shp_regions))
+  {
+    n_poly <- nrow(list_shp_regions[[i]]@data)
+    list_shp_regions[[i]]@data <- cbind(list_shp_regions[[i]]@data, data.frame("region" = rep(region_names[i], times = n_poly)))
+  }
+  
   # Aggregate SpatialPolygons for regions
   if (sum(!check_NaN) == 1)
   { # Case with only one region remaining with data
-    all_sp_polygons <- list_sp_regions
+    all_shp_polygons <- list_shp_regions
     
   } else {
     # Case with multiple regions remaining with data
-    all_sp_polygons <- do.call(raster::bind, list_sp_regions)
+    all_shp_polygons <- do.call(raster::bind, list_shp_regions)
   }
   
   # Add the region stats
-  all_sp_polygons@data <- data.frame(all_sp_polygons@data, regions = row.names(region_stat_df), region_stat_df)
+  region_stat_df_with_region_col <- data.frame(region = row.names(region_stat_df), region_stat_df)
+  all_shp_polygons <- sp::merge(x = all_shp_polygons, y = region_stat_df_with_region_col, by = "region")
+  
+  ### Case with only one polygon per region
+  # all_shp_polygons@data <- data.frame(all_shp_polygons@data, regions = row.names(region_stat_df), region_stat_df)
   
   # Rasterize using the SES-PBD value
-  SES_raster <- raster::rasterize(x = all_sp_polygons, y = binary_stack, 
+  SES_raster <- raster::rasterize(x = all_shp_polygons, y = binary_stack, 
                                   field = "SES_PBD", # Variable to use to fix the pixel values within regions
                                   background = NA)  # Value to use to fill empty cells
   
   # Rasterize using the p-values from randomization tests
-  p_value_raster <- raster::rasterize(x = all_sp_polygons, y = binary_stack, 
+  p_value_raster <- raster::rasterize(x = all_shp_polygons, y = binary_stack, 
                                       field = "p_value", # Variable to use to fix the pixel values within regions
                                       background = NA)  # Value to use to fill empty cells
   
@@ -3978,20 +4075,20 @@ source(file = "./functions/compute_SES_tests.R")
 # Load spPolygon shape files for bioregions as example
 load(file = "./input_data/Map_stuff/Bioregions/All_bioregions_in_figure.RData")
 
-# list_sp_regions <- list(Caatinga_shp, Guyana_Shield_shp)
+# list_shp_regions <- list(Caatinga_shp, Guyana_Shield_shp)
 # region_names <- c("Caatinga", "Guyana_Shield")
 
-# list_sp_regions <- list(Central_Andes_shp, Western_Amazon_shp)
+# list_shp_regions <- list(Central_Andes_shp, Western_Amazon_shp)
 # region_names <- c("Central Andes", "Western Amazon")
 
 # plot(binary_stack)
 
-list_sp_regions <- list(Caatinga_shp, Caribbean_Islands_shp, full_CA_shp, Central_Andes_shp, Cerrado_shp, Chacos_shp, Coastal_desert_shp, Guyana_Shield_shp, Llanos_shp, Lower_Amazon_shp, Mata_Atlantica_shp5, Northern_Andes_shp, Pampas_shp, Pantanal_shp, Western_Amazon_shp, Western_Lowlands_shp)
+list_shp_regions <- list(Caatinga_shp, Caribbean_Islands_shp, full_CA_shp, Central_Andes_shp, Cerrado_shp, Chacos_shp, Coastal_desert_shp, Guyana_Shield_shp, Llanos_shp, Lower_Amazon_shp, Mata_Atlantica_shp5, Northern_Andes_shp, Pampas_shp, Pantanal_shp, Western_Amazon_shp, Western_Lowlands_shp)
 region_names <- c("Caatinga", "Caribbean_Islands", "Central_America", "Central_Andes", "Cerrado", "Chacos", "Coastal_desert", "Guyana_Shield", "Llanos", "Lower_Amazon", "Mata_Atlantica", "Northern_Andes", "Pampas", "Pantanal", "Western_Amazon", "Western_Lowlands")
 
 
 SES_PBD_vs_TBD_within_regions <- compute_SES_PBD_vs_TBD_within_regions(proba_stack = binary_stack, 
-                                                                       list_sp_regions, region_names,
+                                                                       list_shp_regions, region_names,
                                                                        subsample_size = 1000, # Provide number of pixels to subsample globally and regularly in order to save computing time
                                                                        # subsample_size = NA, # Provide number of pixels to subsample globally and regularly in order to save computing time
                                                                        phylo, # Provide the phylogeny

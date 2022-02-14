@@ -500,7 +500,7 @@ compute_SES_PBD_vs_TBD <- function (proba_stack, phylo,
 
 
 
-compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_sp_regions, region_names,
+compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_shp_regions, region_names,
                                                    subsample_size = NA, # Provide number of pixels to subsample globally and regularly in order to save computing time
                                                    phylo, # Provide the phylogeny
                                                    index_family = "sorensen", # Chose the family of Beta-diversity indices
@@ -540,7 +540,7 @@ compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_sp_regions,
   # Compute observed PBD within regions
   cat(paste0(Sys.time(), " - Compute observed PhyloBetaDiversity in a moving window within regions\n"))
   
-  PBD_obs_results <- compute_within_regional_betadiversity(binary_stack, list_sp_regions = list_sp_regions, region_names = region_names,
+  PBD_obs_results <- compute_within_regional_betadiversity(binary_stack, list_shp_regions = list_shp_regions, region_names = region_names,
                                                            subsample_size = subsample_size,
                                                            diversity_type = "phylo",
                                                            phylo = pruned_tree, index_family = index_family,
@@ -566,7 +566,7 @@ compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_sp_regions,
     random_phylo$tip.label <- sample(random_phylo$tip.label)
     
     # Compute PBD for this randomized phylogeny
-    random_region_df <- compute_within_regional_betadiversity(binary_stack, list_sp_regions = list_sp_regions, region_names = region_names,
+    random_region_df <- compute_within_regional_betadiversity(binary_stack, list_shp_regions = list_shp_regions, region_names = region_names,
                                                               subsample_size = subsample_size,
                                                               diversity_type = "phylo",
                                                               phylo = random_phylo, index_family = index_family,
@@ -602,7 +602,7 @@ compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_sp_regions,
   }
   # Clean out regions with no data
   region_indices_df <- region_indices_df[!check_NaN, ]
-  list_sp_regions <- list_sp_regions[!check_NaN]
+  list_shp_regions <- list_shp_regions[!check_NaN]
   region_names <- region_names[!check_NaN]
   
   
@@ -689,26 +689,37 @@ compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_sp_regions,
   
   ### Generate rasters
   
+  # Add region names to each SpPolygonsDF
+  for (i in 1: length(list_shp_regions))
+  {
+    n_poly <- nrow(list_shp_regions[[i]]@data)
+    list_shp_regions[[i]]@data <- cbind(list_shp_regions[[i]]@data, data.frame("region" = rep(region_names[i], times = n_poly)))
+  }
+  
   # Aggregate SpatialPolygons for regions
   if (sum(!check_NaN) == 1)
   { # Case with only one region remaining with data
-    all_sp_polygons <- list_sp_regions
+    all_shp_polygons <- list_shp_regions
     
   } else {
     # Case with multiple regions remaining with data
-    all_sp_polygons <- do.call(raster::bind, list_sp_regions)
+    all_shp_polygons <- do.call(raster::bind, list_shp_regions)
   }
   
   # Add the region stats
-  all_sp_polygons@data <- data.frame(all_sp_polygons@data, regions = row.names(region_stat_df), region_stat_df)
+  region_stat_df_with_region_col <- data.frame(region = row.names(region_stat_df), region_stat_df)
+  all_shp_polygons <- sp::merge(x = all_shp_polygons, y = region_stat_df_with_region_col, by = "region")
+  
+  ### Case with only one polygon per region
+  # all_shp_polygons@data <- data.frame(all_shp_polygons@data, regions = row.names(region_stat_df), region_stat_df)
   
   # Rasterize using the SES-PBD value
-  SES_raster <- raster::rasterize(x = all_sp_polygons, y = binary_stack, 
+  SES_raster <- raster::rasterize(x = all_shp_polygons, y = binary_stack, 
                                   field = "SES_PBD", # Variable to use to fix the pixel values within regions
                                   background = NA)  # Value to use to fill empty cells
   
   # Rasterize using the p-values from randomization tests
-  p_value_raster <- raster::rasterize(x = all_sp_polygons, y = binary_stack, 
+  p_value_raster <- raster::rasterize(x = all_shp_polygons, y = binary_stack, 
                                       field = "p_value", # Variable to use to fix the pixel values within regions
                                       background = NA)  # Value to use to fill empty cells
   
