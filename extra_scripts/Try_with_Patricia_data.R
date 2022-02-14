@@ -77,7 +77,7 @@ plot(within_regional_betadiversity[[2]], zlim = c(0, 0.6))
 
 
 
-### Create Patricia raster's stack
+### Create Patricia's Raster stack
 
 path_to_tif_files <- list.files(path = "./input_data/Map_stuff/Patricia_data/", pattern = ".tif$", full.names = T)
 Patricia_sp_binary_stack <- stack(path_to_tif_files)
@@ -183,7 +183,7 @@ SES_PBD_vs_TBD_within_regions <- compute_SES_PBD_vs_TBD_within_regions(proba_sta
                                                                        index_family = "sorensen", # Chose the family of Beta-diversity indices
                                                                        beta_part = "turnover",    # Chose the partition
                                                                        aggreg_type = "mean_pairwise",     # Chose the aggregation method
-                                                                       seed = 1, randomizations = 99, # To select the number of randomization
+                                                                       seed = 1, randomizations = 999, # To select the number of randomization
                                                                        alpha = 0.05,  # Threshold for significance for a two-sided test
                                                                        export_null_df = F, # To include the df with indices values from all randomization in the output
                                                                        export_region_stats_df = T, # To include the df with statistics from the tests for each region
