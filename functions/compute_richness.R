@@ -10,6 +10,6 @@
 
 compute_richness <- function(proba_stack)
 {
-  richness <- readAll(calc(proba_stack, fun = sum))
+  richness <- calc(proba_stack, fun = sum)
   return(richness)
 }
