@@ -6,9 +6,10 @@
 ### Contents ###
 
 # 1/ SES-PhyloDiversity (PD) according to Species Richness (SR)
-# 2/ SES-PhyoBetaDiversity (PBD) according to Taxonomic BetaDiversity (TBD)
-# 3/ SES-PhyoBetaDiversity (PBD) according to Taxonomic BetaDiversity (TBD) within regions 
-
+# 2/ SES-MPD (MPD) according to Species Richness (SR)
+# 3/ SES-PhyoBetaDiversity (PBD) according to Taxonomic BetaDiversity (TBD)
+# 4/ SES-PhyoBetaDiversity (PBD) according to Taxonomic BetaDiversity (TBD) within regions 
+# 5/ SES-Mimicry richness (MR) according to Species Richness (SR)
 
 ### SES-tests to account for deviance (Leprieur et al., 2012 ; Rosauer & Jetz, 2014). 
   # Test the significance of a phylogenetic index according to its taxonomic equivalent based only on species composition.
@@ -33,16 +34,23 @@
 #               (c) p-values from randomized tests using quantiles
 #               (d) Significant areas following p-values from randomized tests
 #           Raster Stack of index values for randomized communities (optional: "export_null_rasters" = T)
+#           Diversification model for simulating phylogeny (best fitted if selection by AIC)
 
 # Prints = Four maps of (a) SES-PD, (b) Significant areas following SES-PD, (c) p-values from randomized tests using quantiles, (d) Significant areas following p-values from randomized tests
 #          Example of null distribution for a community (Optional: "plot_distri" = T)
+#          If using diversification models for simulating phylogeny: model results
+#          If selection by AIC: AIC of diversification models for simulating phylogeny 
 
 
 
 compute_SES_Faith_PD_vs_SR <- function (proba_stack, phylo, seed = 1, # Set seed to ensure reproducibility
+                                        null_model = "keep_phylo",  # "keep_phylo" , "Yule", "BD", "AIC_selection"
+                                        nsp_tot = NULL, # To provide the total number of species in the clade for subsampling in case data do not encompasses all species in the studied clade
                                         randomizations = 999, # To select the number of randomization
                                         alpha = 0.05,  # Threshold for significance for a two-sided test
                                         export_null_rasters = F, # Include the raster Stack of PD obtained from randomization in the output
+                                        export_null_model = F, # Include the best fitted model for simulating phylogeny
+                                        plot_maps = T, # To plot the SES-maps
                                         plot_distri = T, # To plot the null distribution for an "average" community as an example
                                         example_coords = NULL) # To provide the coordinates of the community to use as example, otherwise a community with median species richness is used.
 {
@@ -59,24 +67,96 @@ compute_SES_Faith_PD_vs_SR <- function (proba_stack, phylo, seed = 1, # Set seed
   Faith_PD_obs <- compute_Faith_PD(proba_stack = proba_stack_for_phylo, phylo = pruned_tree, quiet = T)
   names(Faith_PD_obs) <- "Faith_PD_obs"
   
-  # Loop for each randomization
+  ### Prepare null model for phylogeny generation
+  
+  # Compute the incomplete sampling fraction (i.e., proportion of species present in the tree vs. actual number of species in the clade)
+  if (is.null(nsp_tot))  # If no total number of species is provided, we assume the phylogeny is complete
+  { 
+    nsp_tot <- length(phylo$tip.label)
+  } 
+  sampling_fraction <- length(phylo$tip.label) / nsp_tot 
+  if (sampling_fraction > 1) { stop("'nsp_tot' must be higher than the number of tips in the phylogeny\nIf your phylogeny includes species outside of the studied clade, please remove them before running the function") }
+  
+  # Null model based on Yule Birth-only model to generate random phylogeny
+  if (null_model %in% c("Yule", "AIC_selection"))
+  {
+    fit_Yule <- phytools::fit.yule(tree = phylo, rho = sampling_fraction)
+    print(fit_Yule)
+    
+    if (null_model == "Yule")
+    {
+      best_fit <- fit_Yule
+    }
+  }
+  
+  # Null model based on Birth-Death model to generate random phylogeny
+  if (null_model %in% c("BD", "AIC_selection"))
+  {
+    fit_BD <- phytools::fit.bd(tree = phylo, rho = sampling_fraction)
+    print(fit_BD)
+    
+    if (null_model == "BD")
+    {
+      best_fit <- fit_BD
+    }
+  }
+  
+  # Chose the best model based on AIC
+  if (null_model == "AIC_selection")
+  {
+    AIC_df <- AIC(fit_Yule, fit_BD) ; print(AIC_df)
+    best_fit <- list(fit_Yule, fit_BD)[[which.min(AIC_df$AIC)]]
+  }
+  
+  ### Loop for each randomization
   PD_stack <- stack(Faith_PD_obs)
   for (i in 1:randomizations)
   {
-    cat(paste0(Sys.time(), " - Randomization - ", i," on ",randomizations,"\n"))
+    cat(paste0("\n", Sys.time(), " - Randomization - ", i," on ",randomizations,"\n"))
     
-    # Randomize species in the phylogeny
-    random_phylo <- pruned_tree
-    random_phylo$tip.label <- sample(random_phylo$tip.label)
+    ### Generate phylogeny for the null model
     
-    # Compute Faith_PD for this randomized phylogeny
+    # Null model based on tip randomization
+    if (null_model == "keep_phylo")
+    {
+      # Randomize species in the phylogeny
+      random_phylo <- pruned_tree
+      random_phylo$tip.label <- sample(random_phylo$tip.label)
+    }
+    
+    # Null model based on Yule or Birth-Death model
+    if (null_model %in% c("Yule", "BD", "AIC_selection"))
+    {
+      # Generate the phylogeny
+      # ?phytools::pbtree
+      
+      full_tree <- phytools::pbtree(n = nsp_tot,
+                                    b = best_fit$b,
+                                    d = best_fit$d,
+                                    nsim = 1,
+                                    type = "continuous",
+                                    extant.only = T)
+      
+      # Recale so the root has the same age than the initial phylogeny
+      initial_phylo_depth <- max(ape::node.depth.edgelength(phylo))
+      full_tree_rescaled <- geiger::rescale(x = full_tree, model = "depth", depth = initial_phylo_depth)
+      
+      # plot(random_phylo)
+      
+      # Trim the proper subsample of species
+      random_phylo <- ape::keep.tip(full_tree_rescaled, sample(x = 1:nsp_tot, size = length(pruned_tree$tip.label)))
+      random_phylo$tip.label <- sample(pruned_tree$tip.label)
+    }
+    
+    ### Compute Faith_PD for this randomized phylogeny
     random_PD <- compute_Faith_PD(proba_stack_for_phylo, random_phylo, quiet = T)
     names(random_PD) <- paste0("Faith_PD_random_", i)
     
-    # Add to the final Raster Stack
+    ### Add to the final Raster Stack
     PD_stack <- addLayer(PD_stack, random_PD)
   }
   
+  ### Plot null distribution for a community if requested
   if(plot_distri)
   {
     # If no example community is provided
@@ -208,28 +288,329 @@ compute_SES_Faith_PD_vs_SR <- function (proba_stack, phylo, seed = 1, # Set seed
   p_value_signif <- raster::cover(raster::cover(p_value_signif_lower, p_value_signif_upper), (continental_mask + 0.5))
   
   ### Plot the four raster Layers
-  par(mfrow = c(2,2))
   
-  plot(SES_raster, main = "SES-PD", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  plot(SES_signif, main = paste0("SES-PD significant areas\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  
-  plot(p_value_raster, zlim = c(0, 1), main = paste0("p-values from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  plot(p_value_signif, zlim = c(0, 1), main = paste0("Significant areas from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  
-  par(mfrow = c(1,1))
+  if(plot_maps)
+  {
+    par(mfrow = c(2,2))
+    
+    plot(SES_raster, main = "SES-PD", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(SES_signif, main = paste0("SES-PD significant areas\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    plot(p_value_raster, zlim = c(0, 1), main = paste0("p-values from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(p_value_signif, zlim = c(0, 1), main = paste0("Significant areas from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    par(mfrow = c(1,1))
+  }
   
   ### Export
   
   final_output <- list(SES_raster, SES_signif, p_value_raster, p_value_signif)
   # Include the Stack of randomized community if requested
   if (export_null_rasters) { final_output <- append(final_output, list(PD_stack)) }
+  # Include best null model for phylogeny simulation if requested
+  if (null_model %in% c("Yule", "BD", "AIC_selection"))
+  {
+    if (export_null_model) { final_output <- append(final_output, list(best_fit)) }
+  }
   
   return(final_output)
   
 }
 
 
-##### 2/ Function to map SES-PBD according to TBD ######
+##### 2/ Function to map SES-MPD according to SR #####
+
+# Inputs = Raster Stack of species/OMU probability of presence
+#          Phylogeny of the clade
+
+# Outputs = Raster Stack with four maps
+#               (a) SES-MPD
+#               (b) Significant areas following SES-MPD assuming Normal distribution of the null distribution
+#               (c) p-values from randomized tests using quantiles
+#               (d) Significant areas following p-values from randomized tests
+#           Raster Stack of index values for randomized communities (optional: "export_null_rasters" = T)
+
+# Prints = Four maps of (a) SES-MPD, (b) Significant areas following SES-MPD, (c) p-values from randomized tests using quantiles, (d) Significant areas following p-values from randomized tests
+#          Example of null distribution for a community (Optional: "plot_distri" = T)
+
+
+compute_SES_MPD_vs_SR <- function (proba_stack, phylo, seed = 1, # Set seed to ensure reproducibility
+                                   null_model = "keep_phylo",  # "keep_phylo" , "Yule", "BD", "AIC_selection"
+                                   nsp_tot = NULL, # To provide the total number of species in the clade for subsampling in case data do not encompasses all species in the studied clade
+                                   randomizations = 999, # To select the number of randomization
+                                   quiet = T, # To display or not internal progress for each MPD computation
+                                   alpha = 0.05,  # Threshold for significance for a two-sided test
+                                   export_null_rasters = F, # Include the raster Stack of PD obtained from randomization in the output
+                                   export_null_model = F, # Include the best fitted model for simulating phylogeny
+                                   plot_maps = T, # To plot the SES-maps
+                                   plot_distri = T, # To plot the null distribution for an "average" community as an example
+                                   example_coords = NULL) # To provide the coordinates of the community to use as example, otherwise a community with median species richness is used.
+{
+  # Set the random seed for reproducibility
+  set.seed(seed = seed)
+  
+  # Match raster Stack and Phylogeny species lists
+  clean_stack_and_phylo <- match_stack_and_phylo(proba_stack, phylo)
+  proba_stack_for_phylo <- clean_stack_and_phylo[[1]]
+  pruned_tree <- clean_stack_and_phylo[[2]]
+  
+  # Compute observed MPD
+  cat(paste0(Sys.time(), " - Compute observed MPD\n"))
+  MPD_obs <- compute_MPD(proba_stack = proba_stack_for_phylo, phylo = pruned_tree, quiet = quiet)
+  names(MPD_obs) <- "MPD_obs"
+  
+  ### Prepare null model for phylogeny generation
+  
+  # Compute the incomplete sampling fraction (i.e., proportion of species present in the tree vs. actual number of species in the clade)
+  if (is.null(nsp_tot))  # If no total number of species is provided, we assume the phylogeny is complete
+  { 
+    nsp_tot <- length(phylo$tip.label)
+  } 
+  sampling_fraction <- length(phylo$tip.label) / nsp_tot 
+  if (sampling_fraction > 1) { stop("'nsp_tot' must be higher than the number of tips in the phylogeny\nIf your phylogeny includes species outside of the studied clade, please remove them before running the function") }
+  
+  # Null model based on Yule Birth-only model to generate random phylogeny
+  if (null_model %in% c("Yule", "AIC_selection"))
+  {
+    fit_Yule <- phytools::fit.yule(tree = phylo, rho = sampling_fraction)
+    print(fit_Yule)
+    
+    if (null_model == "Yule")
+    {
+      best_fit <- fit_Yule
+    }
+  }
+  
+  # Null model based on Birth-Death model to generate random phylogeny
+  if (null_model %in% c("BD", "AIC_selection"))
+  {
+    fit_BD <- phytools::fit.bd(tree = phylo, rho = sampling_fraction)
+    print(fit_BD)
+    
+    if (null_model == "BD")
+    {
+      best_fit <- fit_BD
+    }
+  }
+  
+  # Chose the best model based on AIC
+  if (null_model == "AIC_selection")
+  {
+    AIC_df <- AIC(fit_Yule, fit_BD) ; print(AIC_df)
+    best_fit <- list(fit_Yule, fit_BD)[[which.min(AIC_df$AIC)]]
+  }
+  
+  
+  ### Loop for each randomization
+  MPD_stack <- stack(MPD_obs)
+  for (i in 1:randomizations)
+  {
+    cat(paste0(Sys.time(), " - Randomization - ", i," on ",randomizations,"\n"))
+    
+    ## Generate phylogeny for the null model
+    
+    # Null model based on tip randomization
+    if (null_model == "keep_phylo")
+    {
+      # Randomize species in the phylogeny
+      random_phylo <- pruned_tree
+      random_phylo$tip.label <- sample(random_phylo$tip.label)
+    }
+    
+    # Null model based on Yule or Birth-Death model
+    if (null_model %in% c("Yule", "BD", "AIC_selection"))
+    {
+      # Generate the phylogeny
+      # ?phytools::pbtree
+      
+      full_tree <- phytools::pbtree(n = nsp_tot,
+                                    b = best_fit$b,
+                                    d = best_fit$d,
+                                    nsim = 1,
+                                    type = "continuous",
+                                    extant.only = T)
+      
+      # Recale so the root has the same age than the initial phylogeny
+      initial_phylo_depth <- max(ape::node.depth.edgelength(phylo))
+      full_tree_rescaled <- geiger::rescale(x = full_tree, model = "depth", depth = initial_phylo_depth)
+      
+      # plot(random_phylo)
+      
+      # Trim the proper subsample of species
+      random_phylo <- ape::keep.tip(full_tree_rescaled, sample(x = 1:nsp_tot, size = length(pruned_tree$tip.label)))
+      random_phylo$tip.label <- sample(pruned_tree$tip.label)
+    }
+    
+    ## Compute MPD for this randomized phylogeny
+    random_MPD <- compute_MPD(proba_stack_for_phylo, random_phylo, quiet = quiet)
+    names(random_MPD) <- paste0("MPD_random_", i)
+    
+    ## Add to the final Raster Stack
+    MPD_stack <- addLayer(MPD_stack, random_MPD)
+  }
+  
+  ### Plot null distribution for a community if requested
+  if(plot_distri)
+  {
+    # If no example community is provided
+    if (is.null(example_coords))
+    {
+      # Sample an "average" community
+      com_ranks <- rank(MPD_obs[], ties.method = "random", na.last = "keep")
+      sample_com_index <- which(round(median(com_ranks, na.rm = T)) == com_ranks)
+      
+      # Get its coordinates
+      sample_com_coords <- round(raster::xyFromCell(object = MPD_obs, cell = sample_com_index),3)
+      
+    } else { # If the example community coordinates are provided
+      
+      sample_com_coords <- example_coords
+      
+      # Use the provided coordinates to retrieve its index
+      sample_com_index <- raster::cellFromXY(object = MPD_obs, xy = sample_com_coords)
+    }
+    
+    # Extract statistics
+    com_null_distri <- getValues(MPD_stack)[sample_com_index, ]
+    com_MPD_obs <- com_null_distri[1]
+    mean_null_value <- mean(com_null_distri, na.rm = T)
+    Q2.5_value <- quantile(com_null_distri, 0.025, na.rm = T)
+    Q97.5_value <- quantile(com_null_distri, 0.975, na.rm = T)
+    p_value <- round(ecdf(x = com_null_distri)(com_MPD_obs), 3)
+    SES_value <- round((com_MPD_obs - mean_null_value) / sd(com_null_distri), 3)
+    
+    # Plot null distribution for an "average" community
+    y_counts <- hist(com_null_distri, breaks = 30, plot = F)$counts
+    hist(com_null_distri,
+         breaks = 30, freq = TRUE, col = "gray", 
+         main = paste0("Null distribution of the MPD in a community\nLatitude: ", sample_com_coords[2], "; Longitude: ", sample_com_coords[1]), 
+         xlab = "Mean pairwise Phylogenetic Distance  [My]",
+         cex.axis = 1.5, cex.lab = 1.3, cex.main = 1.6, lwd = 2)
+    arrows(x0 = com_MPD_obs, y0 = max(y_counts)*0.5, x1 = com_MPD_obs, y1 = max(y_counts)*0.1, length = 0.1, lwd = 3)
+    abline(v = mean(com_null_distri), lty = 2, lwd = 2)
+    abline(v = Q2.5_value, lty = 2, lwd = 2, col = "red")
+    abline(v = Q97.5_value, lty = 2, lwd = 2, col = "red")
+    
+    # Insert mean and quantiles legend
+    legend(legend = c(paste0("Mean = ", format(round(mean_null_value, 1), nsmall = 1)), 
+                      paste0("CI 2.5% = ", format(round(Q2.5_value, 1), nsmall = 1)),
+                      paste0("CI 97.5% = ", format(round(Q97.5_value, 1), nsmall = 1))), 
+           x = "topright", inset = c(0.02, 0.02), y.intersp = 1.2, lty = 2 , lwd = 2,
+           col = c("black", "red"), cex = 1.2, bty = "o", bg = "white", box.col = NA)
+    
+    # Insert MPD obs, SES and p-value legend
+    legend(legend = c(paste0("MPD obs = ", round(com_MPD_obs, 2)),
+                      paste0("SES-MPD = ", format(SES_value, nsmall = 3)),
+                      paste0("p = ", format(p_value, nsmall = 3))),
+           x = "topleft", inset = c(0.02, 0.02),
+           cex = 1.2, xjust = 1, bty = "o", bg = "white", box.col = NA)
+  }
+  
+  ### Compute SES-values
+  
+  # Compute the mean of the null distribution
+  mean_null_raster <- raster::calc(x = MPD_stack, fun = mean, na.rm = T)
+  # Compute the sd of the null distribution
+  sd_null_raster <- raster::calc(x = MPD_stack, fun = sd, na.rm = T)
+  # Compute the SES-values
+  SES_raster <- round(((MPD_obs - mean_null_raster) / sd_null_raster), 3)
+  
+  ### Apply threshold to display only significant areas
+  
+  # Compute thresholds from alpha level
+  threshold_lower <- qnorm(p = alpha/2, mean = 0, sd = 1, lower.tail = T)
+  threshold_upper <- qnorm(p = alpha/2, mean = 0, sd = 1, lower.tail = F)
+  
+  # Create background raster
+  continental_mask <- (SES_raster < Inf) - 1
+  
+  # Create masks
+  SES_signif_lower_mask <- SES_raster < threshold_lower
+  SES_signif_lower_mask[SES_signif_lower_mask[] == 0] <- NA
+  SES_signif_upper_mask <- SES_raster > threshold_upper
+  SES_signif_upper_mask[SES_signif_upper_mask[] == 0] <- NA
+  
+  # Apply masks
+  SES_signif_lower <- raster::mask(x = SES_raster, mask = SES_signif_lower_mask)
+  SES_signif_upper <- raster::mask(x = SES_raster, mask = SES_signif_upper_mask)
+  
+  # Aggregate all-in-one
+  SES_signif <- mask(x = calc(stack(SES_signif_lower, SES_signif_upper), fun = sum, na.rm = T), continental_mask)
+  
+  ### Compute p-value
+  
+  # Loop per community
+  MPD_stack_values <- raster::getValues(MPD_stack)
+  all_p_values <- NA
+  for (i in 1:nrow(MPD_stack_values))
+  {
+    # Extract community data
+    com_data <- MPD_stack_values[i, ]
+    
+    # Check presence of data
+    if(!any(is.na(com_data)) & (com_data[1] > 0))
+    {
+      # Compute p-value for this community
+      com_p_value <- round(ecdf(x = com_data)(com_data[1]), 3)
+      all_p_values[i] <- com_p_value
+    } else {
+      # Provide NA if no data
+      all_p_values[i] <- NA
+    }
+  }
+  
+  # Put in raster
+  p_value_raster <- continental_mask
+  p_value_raster@data@values[!is.na(all_p_values)] <- all_p_values[!is.na(all_p_values)]
+  
+  ### Apply threshold to display only significant areas
+  
+  # Create masks
+  p_value_signif_lower_mask <- p_value_raster < (alpha/2)
+  p_value_signif_lower_mask[p_value_signif_lower_mask[] == 0] <- NA
+  p_value_signif_upper_mask <- p_value_raster > (1-(alpha/2))
+  p_value_signif_upper_mask[p_value_signif_upper_mask[] == 0] <- NA
+  
+  # Apply masks
+  p_value_signif_lower <- raster::mask(x = p_value_raster, mask = p_value_signif_lower_mask)
+  p_value_signif_upper <- raster::mask(x = p_value_raster, mask = p_value_signif_upper_mask)
+  
+  # Aggregate all-in-one
+  # p_value_signif <- mask(x = calc(stack(p_value_signif_lower, p_value_signif_lower), fun = sum, na.rm = T), continental_mask)
+  # Fix non-significant value to 0.5 to improve plot
+  p_value_signif <- raster::cover(raster::cover(p_value_signif_lower, p_value_signif_upper), (continental_mask + 0.5))
+  
+  ### Plot the four raster Layers
+  
+  if (plot_maps)
+  {
+    par(mfrow = c(2,2))
+    
+    plot(SES_raster, main = "SES-MPD", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(SES_signif, main = paste0("SES-MPD significant areas\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    plot(p_value_raster, zlim = c(0, 1), main = paste0("p-values from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(p_value_signif, zlim = c(0, 1), main = paste0("Significant areas from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    par(mfrow = c(1,1))
+  }
+  
+  ### Export
+  
+  final_output <- list(SES_raster, SES_signif, p_value_raster, p_value_signif)
+  # Include the Stack of randomized community if requested
+  if (export_null_rasters) { final_output <- append(final_output, list(PD_stack)) }
+  # Include best null model for phylogeny simulation if requested
+  if (null_model %in% c("Yule", "BD", "AIC_selection"))
+  {
+    if (export_null_model) { final_output <- append(final_output, list(best_fit)) }
+  }
+  
+  return(final_output)
+  
+}
+
+##### 3/ Function to map SES-PBD according to TBD ######
 
 ### PhyloBetaDiversity based on moving window approach (See compute_moving_betadiversity)
 
@@ -266,6 +647,7 @@ compute_SES_PBD_vs_TBD <- function (proba_stack, phylo,
                                     randomizations = 999, # To select the number of randomization
                                     alpha = 0.05,  # Threshold for significance for a two-sided test
                                     export_null_rasters = F, # Include the raster Stack of PBD obtained from randomization in the output
+                                    plot_maps = T, # To plot the SES-maps
                                     plot_distri = T, # To plot the null distribution for an "average" community as an example
                                     example_coords = NULL) # To provide the coordinates of the community to use as example, otherwise a community with median species richness is used.
 {
@@ -446,15 +828,20 @@ compute_SES_PBD_vs_TBD <- function (proba_stack, phylo,
   p_value_signif <- raster::cover(raster::cover(p_value_signif_lower, p_value_signif_upper), (continental_mask + 0.5))
   
   ### Plot the four raster Layers
-  par(mfrow = c(2,2))
   
-  plot(SES_raster, main = "SES-PBD", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  plot(SES_signif, main = paste0("SES-PBD significant areas\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+  if (plot_maps)
+  {
+    par(mfrow = c(2,2))
+    
+    plot(SES_raster, main = "SES-PBD", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(SES_signif, main = paste0("SES-PBD significant areas\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    plot(p_value_raster, zlim = c(0, 1), main = paste0("p-values from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(p_value_signif, zlim = c(0, 1), main = paste0("Significant areas from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    par(mfrow = c(1,1))
+  }
   
-  plot(p_value_raster, zlim = c(0, 1), main = paste0("p-values from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  plot(p_value_signif, zlim = c(0, 1), main = paste0("Significant areas from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  
-  par(mfrow = c(1,1))
   
   ### Export
   
@@ -466,8 +853,7 @@ compute_SES_PBD_vs_TBD <- function (proba_stack, phylo,
   
 }
 
-
-##### 3/ Function to compute SES-PBD according to TBD within regions ####
+##### 4/ Function to compute SES-PBD according to TBD within regions ####
 
 ### PhyloBetaDiversity computed within each region (See compute_within_regional_betadiversity)
 
@@ -511,6 +897,7 @@ compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_shp_regions
                                                    alpha = 0.05,  # Threshold for significance for a two-sided test
                                                    export_null_df = F, # To include the df with indices values from all randomization in the output
                                                    export_region_stats_df = T, # To include the df with statistics from the SES-tests for each region
+                                                   plot_maps = T, # To plot the SES-maps
                                                    plot_distri = T, # To plot the null distribution for an "average" community as an example
                                                    example_region_name = NULL) # To provide the name of the region to use as example. Otherwise it is randomly chosen.
 {
@@ -763,15 +1150,19 @@ compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_shp_regions
   p_value_signif <- raster::cover(raster::cover(p_value_signif_lower, p_value_signif_upper), (continental_mask + 0.5))
   
   ### Plot the four raster Layers
-  par(mfrow = c(2,2))
   
-  plot(SES_raster, main = "SES-PBD", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  plot(SES_signif, main = paste0("SES-PBD significant areas\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  
-  plot(p_value_raster, zlim = c(0, 1), main = paste0("p-values from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  plot(p_value_signif, zlim = c(0, 1), main = paste0("Significant areas from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  
-  par(mfrow = c(1,1))
+  if (plot_maps)
+  {
+    par(mfrow = c(2,2))
+    
+    plot(SES_raster, main = "SES-PBD", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(SES_signif, main = paste0("SES-PBD significant areas\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    plot(p_value_raster, zlim = c(0, 1), main = paste0("p-values from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(p_value_signif, zlim = c(0, 1), main = paste0("Significant areas from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    par(mfrow = c(1,1))
+  }
   
   ### Export
   
@@ -787,6 +1178,229 @@ compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_shp_regions
   
   # Include the df of stats per regions if requested
   if (export_region_stats_df) { final_output <- append(final_output, list(region_indices_df)) }
+  
+  return(final_output)
+  
+}
+
+
+##### 5/ Function to compute SES-Mimicry richness according to species richness ####
+
+# Inputs = Raster Stack of species/OMU probability of presence
+#          Mimicry ring membership in a character vector
+
+# Outputs = Raster Stack with four maps
+#               (a) SES-MR
+#               (b) Significant areas following SES-MR assuming Normal distribution of the null distribution
+#               (c) p-values from randomized tests using quantiles
+#               (d) Significant areas following p-values from randomized tests
+#           Raster Stack of index values for randomized communities (optional: "export_null_rasters" = T)
+
+# Prints = Four maps of (a) SES-MR, (b) Significant areas following SES-MR, (c) p-values from randomized tests using quantiles, (d) Significant areas following p-values from randomized tests
+#          Example of null distribution for a community (Optional: "plot_distri" = T)
+
+
+
+compute_SES_MR_vs_taxo_richness <- function (proba_stack, # Species or OMU continuous (or binary) Raster Stack of SDM outputs
+                                             mimicry_ring_membership, # Character string vector of mimicry ring membership per species/OMU in the same order than the Stack
+                                             seed = 1, # Set seed to ensure reproducibility
+                                             randomizations = 999, # To select the number of randomization
+                                             alpha = 0.05,  # Threshold for significance for a two-sided test
+                                             export_null_rasters = F, # Include the raster Stack of MR obtained from randomization in the output
+                                             plot_maps = T, # To plot the SES-maps
+                                             plot_distri = T, # To plot the null distribution for an "average" community as an example
+                                             example_coords = NULL, # To provide the coordinates of the community to use as example, otherwise a community with median species richness is used.
+                                             quiet = F) # Should each generation of mimicry ring stack be quiet or not
+{
+  
+  # Set the random seed for reproducibility
+  set.seed(seed = seed)
+  
+  cat(paste0(Sys.time(), " - Compute observed Mimicry richness\n"))
+  
+  # Generate observed mimicry proba stack
+  ring_proba_stack_obs <- generate_mimicry_ring_stack(proba_stack = proba_stack, # Species or OMU continuous (or binary) Raster Stack of SDM outputs
+                                                      mimicry_ring_membership = mimicry_ring_membership, # Character string vector of mimicry ring membership per species/OMU in the same order than the Stack
+                                                      stack_type = "proba", quiet = quiet)
+  
+  # Compute observed mimicry richness (MR)
+  MR_obs <- compute_richness(ring_proba_stack_obs)
+  names(MR_obs) <- "MR_obs"
+  
+  
+  ### Loop for each randomization
+  MR_stack <- stack(MR_obs)
+  for (i in 1:randomizations)
+  {
+    cat(paste0(Sys.time(), " - Randomization - ", i," on ",randomizations,"\n"))
+    
+    # Randomize mimicry ring membership
+    random_mimicry_ring_membership <- as.character(mimicry_ring_membership)
+    random_mimicry_ring_membership <- sample(random_mimicry_ring_membership)
+    
+    # Compute mimicry ring proba stack for this random mimicry ring membership scheme
+    random_MR_stack <- generate_mimicry_ring_stack(proba_stack = proba_stack, # Species or OMU continuous (or binary) Raster Stack of SDM outputs
+                                                   mimicry_ring_membership = random_mimicry_ring_membership, # Character string vector of mimicry ring membership per species/OMU in the same order than the Stack
+                                                   stack_type = "proba", quiet = quiet)
+    
+    # Compute mimicry richness for this random mimicry ring membership scheme
+    random_MR <- compute_richness(random_MR_stack)
+    names(random_MR) <- paste0("MR_random_", i)
+    
+    # Add to the final Raster Stack
+    MR_stack <- addLayer(MR_stack, random_MR)
+  }
+  
+  if(plot_distri)
+  {
+    # If no example community is provided
+    if (is.null(example_coords))
+    {
+      # Sample an "average" community
+      com_ranks <- rank(MR_obs[], ties.method = "random", na.last = "keep")
+      sample_com_index <- which(round(median(com_ranks, na.rm = T)) == com_ranks)
+      
+      # Get its coordinates
+      sample_com_coords <- round(raster::xyFromCell(object = MR_obs, cell = sample_com_index),3)
+      
+    } else { # If the example community coordinates are provided
+      
+      sample_com_coords <- example_coords
+      
+      # Use the provided coordinates to retrieve its index
+      sample_com_index <- raster::cellFromXY(object = MR_obs, xy = sample_com_coords)
+    }
+    
+    # Extract statistics
+    com_null_distri <- getValues(MR_stack)[sample_com_index, ]
+    com_MR_obs <- com_null_distri[1]
+    mean_null_value <- mean(com_null_distri, na.rm = T)
+    Q2.5_value <- quantile(com_null_distri, 0.025, na.rm = T)
+    Q97.5_value <- quantile(com_null_distri, 0.975, na.rm = T)
+    p_value <- round(ecdf(x = com_null_distri)(com_MR_obs), 3)
+    SES_value <- round((com_MR_obs - mean_null_value) / sd(com_null_distri), 3)
+    
+    # Plot null distribution for an "average" community
+    y_counts <- hist(com_null_distri, breaks = 30, plot = F)$counts
+    hist(com_null_distri,
+         breaks = 30, freq = TRUE, col = "gray", 
+         main = paste0("Null distribution of the mimicry richness in a community\nLatitude: ", sample_com_coords[2], "; Longitude: ", sample_com_coords[1]), 
+         xlab = "Mimicry richness  [rings]",
+         cex.axis = 1.5, cex.lab = 1.3, cex.main = 1.6, lwd = 2)
+    arrows(x0 = com_MR_obs, y0 = max(y_counts)*0.5, x1 = com_MR_obs, y1 = max(y_counts)*0.1, length = 0.1, lwd = 3)
+    abline(v = mean(com_null_distri), lty = 2, lwd = 2)
+    abline(v = Q2.5_value, lty = 2, lwd = 2, col = "red")
+    abline(v = Q97.5_value, lty = 2, lwd = 2, col = "red")
+    
+    # Insert mean and quantiles legend
+    legend(legend = c(paste0("Mean = ", format(round(mean_null_value, 1), nsmall = 1)), 
+                      paste0("CI 2.5% = ", format(round(Q2.5_value, 1), nsmall = 1)),
+                      paste0("CI 97.5% = ", format(round(Q97.5_value, 1), nsmall = 1))), 
+           x = "topright", inset = c(0.02, 0.02), y.intersp = 1.2, lty = 2 , lwd = 2,
+           col = c("black", "red"), cex = 1.2, bty = "o", bg = "white", box.col = NA)
+    
+    # Insert MR obs, SES and p-value legend
+    legend(legend = c(paste0("MR obs = ", round(com_MR_obs, 2)),
+                      paste0("SES-MR = ", format(SES_value, nsmall = 3)),
+                      paste0("p = ", format(p_value, nsmall = 3))),
+           x = "topleft", inset = c(0.02, 0.02),
+           cex = 1.2, xjust = 1, bty = "o", bg = "white", box.col = NA)
+  }
+  
+  ### Compute SES-values
+  
+  # Compute the mean of the null distribution
+  mean_null_raster <- raster::calc(x = MR_stack, fun = mean, na.rm = T)
+  # Compute the sd of the null distribution
+  sd_null_raster <- raster::calc(x = MR_stack, fun = sd, na.rm = T)
+  # Compute the SES-values
+  SES_raster <- round(((MR_obs - mean_null_raster) / sd_null_raster), 3)
+  
+  ### Apply threshold to display only significant areas
+  
+  # Compute thresholds from alpha level
+  threshold_lower <- qnorm(p = alpha/2, mean = 0, sd = 1, lower.tail = T)
+  threshold_upper <- qnorm(p = alpha/2, mean = 0, sd = 1, lower.tail = F)
+  
+  # Create background raster
+  continental_mask <- (SES_raster < Inf) - 1
+  
+  # Create masks
+  SES_signif_lower_mask <- SES_raster < threshold_lower
+  SES_signif_lower_mask[SES_signif_lower_mask[] == 0] <- NA
+  SES_signif_upper_mask <- SES_raster > threshold_upper
+  SES_signif_upper_mask[SES_signif_upper_mask[] == 0] <- NA
+  
+  # Apply masks
+  SES_signif_lower <- raster::mask(x = SES_raster, mask = SES_signif_lower_mask)
+  SES_signif_upper <- raster::mask(x = SES_raster, mask = SES_signif_upper_mask)
+  
+  # Aggregate all-in-one
+  SES_signif <- mask(x = calc(stack(SES_signif_lower, SES_signif_upper), fun = sum, na.rm = T), continental_mask)
+  
+  ### Compute p-values from randomization tests
+  
+  # Loop per community
+  MR_stack_values <- raster::getValues(MR_stack)
+  all_p_values <- NA
+  for (i in 1:nrow(MR_stack_values))
+  {
+    # Extract community data
+    com_data <- MR_stack_values[i, ]
+    
+    # Check presence of data
+    if(!any(is.na(com_data)) & (com_data[1] > 0))
+    {
+      # Compute p-value for this community
+      com_p_value <- round(ecdf(x = com_data)(com_data[1]), 3)
+      all_p_values[i] <- com_p_value
+    } else {
+      # Provide NA if no data
+      all_p_values[i] <- NA
+    }
+  }
+  
+  # Put in raster
+  p_value_raster <- continental_mask
+  p_value_raster@data@values[!is.na(all_p_values)] <- all_p_values[!is.na(all_p_values)]
+  
+  ### Apply threshold to display only significant areas
+  
+  # Create masks
+  p_value_signif_lower_mask <- p_value_raster < (alpha/2)
+  p_value_signif_lower_mask[p_value_signif_lower_mask[] == 0] <- NA
+  p_value_signif_upper_mask <- p_value_raster > (1-(alpha/2))
+  p_value_signif_upper_mask[p_value_signif_upper_mask[] == 0] <- NA
+  
+  # Apply masks
+  p_value_signif_lower <- raster::mask(x = p_value_raster, mask = p_value_signif_lower_mask)
+  p_value_signif_upper <- raster::mask(x = p_value_raster, mask = p_value_signif_upper_mask)
+  
+  # Aggregate all-in-one
+  # p_value_signif <- mask(x = calc(stack(p_value_signif_lower, p_value_signif_lower), fun = sum, na.rm = T), continental_mask)
+  # Fix non-significant value to 0.5 to improve plot
+  p_value_signif <- raster::cover(raster::cover(p_value_signif_lower, p_value_signif_upper), (continental_mask + 0.5))
+  
+  ### Plot the four raster Layers
+  
+  if (plot_maps)
+  {
+    par(mfrow = c(2,2))
+    
+    plot(SES_raster, main = "SES-MR", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(SES_signif, main = paste0("SES-MR significant areas\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    plot(p_value_raster, zlim = c(0, 1), main = paste0("p-values from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(p_value_signif, zlim = c(0, 1), main = paste0("Significant areas from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    par(mfrow = c(1,1))
+  }
+  
+  ### Export
+  
+  final_output <- list(SES_raster, SES_signif, p_value_raster, p_value_signif)
+  # Include the Stack of randomized community if requested
+  if (export_null_rasters) { final_output <- append(final_output, list(MR_stack)) }
   
   return(final_output)
   

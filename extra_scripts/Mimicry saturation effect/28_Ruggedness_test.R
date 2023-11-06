@@ -154,6 +154,8 @@ library(spatialEco)
 # saveRDS(DEM_TRI_15m, file = "./outputs/Indices_maps/DEM_TRI_15m.rds", version = "2")
 # plot(DEM_TRI_15m)
 
+DEM_SRTM_v4_1m <- readRDS(file = "./input_data/SRTM/DEM_SRTM_v4_1m.rds")
+
 # Version for 1' resolution, window size = 1 community
 DEM_TRI_1m <- tri(r = DEM_SRTM_v4_1m, s = 15, # size of the window
                exact = TRUE, file.name = NULL)
@@ -201,6 +203,8 @@ res_GAM <- residuals.gam(mod_gam, type = "pearson")
 
 GAM_df <- data.frame(cbind(ring.richness_values, sp.richness_values, res_GAM))
 saveRDS(GAM_df, file = "./outputs/Indices_maps/GAM_df.rds")
+
+GAM_df <- readRDS(file = "./outputs/Indices_maps/GAM_df.rds")
 
 library(ggplot2)
 
@@ -273,13 +277,20 @@ TRI_others <- DEM_TRI_masked[][-c(Central_America_index, East_Ecuador_index, Per
 TRI_others <- TRI_others[!is.na(TRI_others)]
 
 
-# Generate df
-TRI_bioregions <- c(TRI_CA, TRI_EE, TRI_EP, TRI_MA)
-Name_bioregions <- c(rep("Central_America", times = length(TRI_CA)), rep("East_Ecuador", times = length(TRI_EE)), rep("East_Peru", times = length(TRI_EP)), rep("Mata_Atlantica", times = length(TRI_MA)))
+### Generate df
+
+# TRI_bioregions <- c(TRI_CA, TRI_EE, TRI_EP, TRI_MA)
+# Name_bioregions <- c(rep("Central_America", times = length(TRI_CA)), rep("East_Ecuador", times = length(TRI_EE)), rep("East_Peru", times = length(TRI_EP)), rep("Mata_Atlantica", times = length(TRI_MA)))
+
+TRI_bioregions <- c(TRI_others, TRI_CA, TRI_EE, TRI_EP, TRI_MA)
+Name_bioregions <- c(rep("Others", times = length(TRI_others)), rep("Central_America", times = length(TRI_CA)), rep("East_Ecuador", times = length(TRI_EE)), rep("East_Peru", times = length(TRI_EP)), rep("Mata_Atlantica", times = length(TRI_MA)))
+
 TRI_df <- data.frame(cbind(TRI_bioregions, Name_bioregions))
 TRI_df$TRI_bioregions <- as.numeric(as.character(TRI_df$TRI_bioregions))
 
-saveRDS(TRI_df, file = "./outputs/Indices_maps/TRI_df.rds", version = "2")
+TRI_df$Name_bioregions <- factor(x = TRI_df$Name_bioregions, levels = c("Others", "Mata_Atlantica", "Central_America", "East_Ecuador", "East_Peru"), labels = c("Others", "BAF", "CA", "East Ecuador", "East Peru"))
+
+saveRDS(TRI_df, file = "./outputs/Indices_maps/TRI_df.rds")
 
 TRI_df <- readRDS(file = "./outputs/Indices_maps/TRI_df.rds")
 
@@ -289,27 +300,39 @@ library(tidyverse)
 library(ggsignif)
 library(ggpubr)
 
-pdf(file = "./graphs/TRI/Boxplot_TRI_Bioregions.pdf", height = 8, width = 10)
+# Set colors
+
+fill_colors <- c("grey80", gg_color_hue(4)[c(4,1,2,3)])
+
+pdf(file = "./graphs/TRI/Boxplot_TRI_Bioregions2.pdf", height = 6, width = 8)
 
 
 gg_boxplot <- ggplot(data = TRI_df, aes(x = Name_bioregions, y = TRI_bioregions)) +
-  geom_boxplot(fill = gg_color_hue(4)) + 
+  
+  geom_boxplot(fill = fill_colors) + 
+  
   ggtitle("") +
   xlab("") + ylab("Terrain Ruggedness Index") +
-  scale_x_discrete(labels = c("Central America", "East Ecuador", "East Peru", "BAF")) +
+  
+  # scale_x_discrete(labels = c("Central America", "East Ecuador", "East Peru", "BAF")) +
+  scale_x_discrete(labels = c("Others", "BAF", "CA", "East Ecuador", "East Peru")) +
   scale_y_continuous(limits = c(0, 20000), expand = c(0, 0), breaks = seq(0, 20000, 5000)) +
+  
   # stat_compare_means(mapping = aes(x = Name_bioregions, y = TRI_bioregions), comparisons = list(c("East_Ecuador", "East_Peru"), c("Central_America", "East_Ecuador")), hide.ns = FALSE,
   #                    label = "p.signif",  label.x = NULL, label.y = NULL) # +
-  geom_signif(comparisons = list(c("East_Ecuador", "East_Peru") #,
-                                 # c("Central_America", "East_Ecuador"),
-                                 # c("Central America", "East_Peru"),
-                                 # c("Central_America", "BAF"),
-                                 # c("East_Ecuador", "BAF"),
-                                 # c("East_Peru", "BAF")
-                                 ),
+  
+  geom_signif(
+    # comparisons = list(c("East Ecuador", "East Peru"), #,
+    #                              c("Others", "CA"),
+    #                              c("Others", "BAF") # ,
+    #                              # c("Central_America", "BAF"),
+    #                              # c("East_Ecuador", "BAF"),
+    #                              # c("East_Peru", "BAF")
+    #                              ),
               map_signif_level = T,
               textsize = 10,
               size = 1, margin_top = 0.15) +
+  
   theme(panel.background = element_rect(fill = NA),
         legend.position = c(0.85, 0.55),
         # legend.key = element_rect(fill = "white", colour = "white"),
@@ -319,7 +342,7 @@ gg_boxplot <- ggplot(data = TRI_df, aes(x = Name_bioregions, y = TRI_bioregions)
         legend.key.size = unit(2, 'lines'),
         # legend.spacing.y = unit(1,"cm"),
         # axis.line.x = element_line(color = NA),
-        axis.line.y = element_line(color = "black", size = 1.3),
+        axis.line.y = element_line(color = "black", linewidth = 1.3),
         axis.ticks = element_line(color = "black"),
         axis.ticks.x = element_line(size = NA),
         axis.ticks.y = element_line(size = 1.2),
@@ -350,8 +373,19 @@ plot(model_anova)
 
 pairwise.t.test(x = TRI_bioregions, g = Name_bioregions, p.adjust.method = "bonferroni", pool.sd = F) # Tests post-hoc par paires sur un lm # See p.adjust() for information about methods of correction
 
+## East Ecuador vs. East Peru
+
 wilcox.test(x = TRI_EE, y = TRI_EP, alternative = "greater", paired = F)
 # W = 14757, p-value = 1
+wilcox.test(x = TRI_EE, y = TRI_EP, alternative = "two.sided", paired = F)
+# W = 12782, p-value < 0.001
+
+## BAF vs. Others
+wilcox.test(x = TRI_MA, y = TRI_others, alternative = "two.sided", paired = F)
+
+## CA vs. Others
+wilcox.test(x = TRI_CA, y = TRI_others, alternative = "two.sided", paired = F)
+
 
 #### 9/ Plot TRI and bioregions ####
 

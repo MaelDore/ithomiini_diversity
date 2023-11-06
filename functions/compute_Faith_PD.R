@@ -56,7 +56,7 @@ match_stack_and_phylo <- function (proba_stack, phylo)
 # Output = Raster Layer of Faith's PD
 # Print = Lists of species removed from stack because absent from the phylogeny, and respectively.
 
-compute_Faith_PD <- function(proba_stack, phylo)
+compute_Faith_PD <- function(proba_stack, phylo, quiet = F)
 {
   # Create function to aggregate probabilities to higher hierarchical level (aggregate pixel, or go up on a phylogenetic tree)
   aggreg_prob <- function(x, na.rm) 
@@ -106,7 +106,8 @@ compute_Faith_PD <- function(proba_stack, phylo)
     }
     
     # Show k every 1000 iterations and save a backup
-    if (k %% 1000 == 0) {
+    if ((k %% 1000 == 0) & !quiet) 
+    {
       cat(paste0(Sys.time(), " - ", k," on ",nrow(proba_mat),"\n"))
       # save(all_PD, file = "./outputs/Indices_Maps/PD_backup.RData")
     }
@@ -122,3 +123,4 @@ compute_Faith_PD <- function(proba_stack, phylo)
   return(PD_raster)
   
 }
+

@@ -450,7 +450,7 @@ library(spatial)
 # coords.xy <- expand.grid(1:10,10:1)
 coords.xy <- sample.all_coords
 
-# Extract values in a vector (useless for indices which ar already in vector. Only for simulated data stored in matrices)
+# Extract values in a vector (useless for indices which are already in vector. Only for simulated data stored in matrices)
 Y1.vec <- as.vector(t(Y1samp))
 Y2.vec <- as.vector(t(Y2samp))
 N <- length(Y1.vec) # Store nb of observations = uncorrected sample size
@@ -487,7 +487,7 @@ r2 <- correlogram(Y2.surf, Ht)
 r1_sp <- correlogram(Y1.surf_sp, Ht)
 r2_sp <- correlogram(Y2.surf_sp, Ht)
 
-H <- 18 # Choose the max distance class to look at spatial autocorrelation depending on the plot fo the correlograms
+H <- 18 # Choose the max distance class to look at spatial autocorrelation depending on the plot of the correlograms
 # After a certain distance, autocorrelation should be null, thus no need to include the next classes in the computation
 
 # Get automatically the first class with negative autocorrelation, for this class of smaller, for both indices 
@@ -813,7 +813,7 @@ save(dist_all, file = paste0("./outputs/Correlation_tests/dist_all.RData"), vers
 saveRDS(dist_all, file = paste0("./outputs/Correlation_tests/dist_all.rds"), version = "2")
 
 
-##### Approche GLS avec structure de covariance modélisée (Devictor et al., 2014 => corExp)
+##### Approche GLS avec structure de covariance modélisée (Devictor et al., 2014 => corExp)  ####
 # Besoin de subsampling sinon la matrice de distance est trop fat...
 
 # Load maps
@@ -1167,7 +1167,7 @@ plot(Ithomiini.range.raster, col = pal_bl_red,
 dev.off()
 
 
-##### GAM approach (Zupan et al., 2014)
+##### GAM approach (Zupan et al., 2014) ####
 
 # Utilise les coordonnées géographiques comme prédicteurs inclus avec un smooth
 ?gam

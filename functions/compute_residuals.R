@@ -5,7 +5,7 @@
 
 ### Contents ###
 
-# 1/ Map residuals between two raster mapswith indices computed per communities/pixels
+# 1/ Map residuals between two raster maps with indices computed per communities/pixels
 # 2/ Map residuals between two raster maps with indices computed per regions
 
 ### For all function, can specify the statistial model to use to compute the relationship between the two indices

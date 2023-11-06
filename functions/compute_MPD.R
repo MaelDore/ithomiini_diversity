@@ -57,7 +57,9 @@ match_stack_and_phylo <- function (proba_stack, phylo)
 # Print = Lists of species removed from stack because absent from the phylogeny, and respectively.
 
 
-compute_MPD <- function(proba_stack, phylo)
+
+compute_MPD <- function(proba_stack, phylo,
+                        quiet = F) # To display or not the progress of the run, every 1000 iterations
 {
   # Match raster Stack and Phylogeny species lists
   clean_stack_and_phylo <- match_stack_and_phylo(proba_stack, phylo)
@@ -104,7 +106,7 @@ compute_MPD <- function(proba_stack, phylo)
       
     }
     # Show k every 1000 iterations and save a back-up file
-    if (k %% 1000 == 0) 
+    if ((k %% 1000 == 0) & !quiet) 
     {
       cat(paste0(Sys.time(), " - ", k," on ",nrow(proba_mat),"\n"))
       # save(all_MPD, file = "./outputs/Indices_Maps/MPD_backup.RData")
@@ -112,7 +114,7 @@ compute_MPD <- function(proba_stack, phylo)
   }
   
   # Generate a mask for terrestrial areas
-  continental_mask <- (readAll(calc(proba_stack, fun = sum)) >= 0) - 1
+  continental_mask <- (calc(proba_stack, fun = sum) >= 0) - 1
   
   # Write community MPD in a raster with null values as background for terrestrial areas
   MPD_raster <- continental_mask

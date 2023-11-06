@@ -18,7 +18,7 @@ Title <- "Anthropogenic pressures coincide with Neotropical biodiversity hotspot
 
 This repository contains the code and data used to carry out analyses for this research article:
 
-__Doré et al., 2021 - Anthropogenic pressures coincide with Neotropical biodiversity hotspots in a flagship butterfly group. Diversity and Distributions.__ 
+__Doré et al., 2021 - Anthropogenic pressures coincide with Neotropical biodiversity hotspots in a flagship butterfly group. Diversity and Distributions, 28(12), 2912-2930.__ 
 
 
 [![DOI](https://zenodo.org/badge/DOI/10.1111/ddi.13455.svg)](https://doi.org/10.1111/ddi.13455)
@@ -72,7 +72,7 @@ You can download the entire project as a `.zip` from [this URL](/archive/master.
 
 Please cite this research article as:
   
-> Doré, M., Willmott, K., Leroy, B., Chazot, N., Mallet, J., Freitas, A. V. L., Hall, J. P. W., Lamas, G., Dasmahapatra, K. K., Fontaine, C., & Elias, M. (2021). Anthropogenic pressures coincide with Neotropical biodiversity hotspots in a flagship butterfly group. Diversity and Distributions, 00, 1–19. https://doi.org/10.1111/ddi.13455
+> Doré, M., Willmott, K., Leroy, B., Chazot, N., Mallet, J., Freitas, A. V. L., Hall, J. P. W., Lamas, G., Dasmahapatra, K. K., Fontaine, C., & Elias, M. (2021). Anthropogenic pressures coincide with Neotropical biodiversity hotspots in a flagship butterfly group. Diversity and Distributions, 28(12), 2912-2930. https://doi.org/10.1111/ddi.13455
 
 
 ## Associated online archives

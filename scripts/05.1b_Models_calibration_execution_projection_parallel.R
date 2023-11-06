@@ -40,7 +40,6 @@ library(doParallel)
 
 # Detect the number of threads
 numCores <- detectCores()
-# registerDoParallel(numCores)  # To set the nb of threads to use when using %dopar%
 
 cl <- makeCluster(numCores) # Generate the virtual cluster from the number of threads
 registerDoParallel(cl)      # To set the virtual cluster when using %dopar%

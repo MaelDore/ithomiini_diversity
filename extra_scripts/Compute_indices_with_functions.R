@@ -99,8 +99,8 @@ contrasting_raster <- function(x, zmin, zmax)
   continental_mask <- (calc(x, fun = sum) >= 0) - 1
   # plot(continental_mask)
   
-  # Create raster with NA values outside of the species range
-  community_mask_PA <- (calc(proba_stack, fun = sum) > 0) - 1
+  # Create raster with NA values outside of the species range (assuming a sum of zero is outside the range)
+  community_mask_PA <- (calc(x, fun = sum) > 0) - 1
   community_mask <- community_mask_PA
   community_mask[community_mask[] < 0] <- NA
   # plot(community_mask)
@@ -842,6 +842,9 @@ match_stack_and_phylo <- function (proba_stack, phylo)
     cat("\n")
   }
   
+  # Rearrange stack so the species are in the same order than in the phylogeny
+  proba_stack_for_phylo <- proba_stack_for_phylo[[c(pruned_tree$tip.label)]]
+  
   # Return cleaned stack and phylogeny in a list
   cleaned_stack_and_phylo <- list(proba_stack_for_phylo, pruned_tree)
   return(cleaned_stack_and_phylo)
@@ -883,7 +886,7 @@ sp_proba_stack_phylo <- readRDS(file = paste0("./outputs/Indices_stacks/sp_proba
 
 ### 14.1/ Function to compute MPD from SDM continuous outputs
 
-compute_MPD <- function(proba_stack, phylo)
+compute_MPD <- function(proba_stack, phylo, quiet = F)
 {
   # Match raster Stack and Phylogeny species lists
   clean_stack_and_phylo <- match_stack_and_phylo(proba_stack, phylo)
@@ -930,7 +933,7 @@ compute_MPD <- function(proba_stack, phylo)
       
     }
     # Show k every 1000 iterations and save a back-up file
-    if (k %% 1000 == 0) 
+    if ((k %% 1000 == 0) & !quiet) 
     {
       cat(paste0(Sys.time(), " - ", k," on ",nrow(proba_mat),"\n"))
       # save(all_MPD, file = "./outputs/Indices_Maps/MPD_backup.RData")
@@ -938,7 +941,7 @@ compute_MPD <- function(proba_stack, phylo)
   }
   
   # Generate a mask for terrestrial areas
-  continental_mask <- (readAll(calc(proba_stack, fun = sum)) >= 0) - 1
+  continental_mask <- (calc(proba_stack, fun = sum) >= 0) - 1
   
   # Write community MPD in a raster with null values as background for terrestrial areas
   MPD_raster <- continental_mask
@@ -958,7 +961,7 @@ source(file = "./functions/compute_MPD.R")
 
 ### 14.2/ Index computation ####
 
-MPD <- compute_MPD(proba_stack = proba_stack_test, phylo = phylogeny_object)
+MPD <- compute_MPD(proba_stack = sp_proba_stack, phylo = Ithomiini_phylo)
 
 plot(MPD)
 
@@ -966,6 +969,7 @@ plot(MPD)
 save(MPD, file = paste0("./outputs/Indices_maps/MPD.RData"))
 
 
+names(sp_proba_stack)
 
 ##### 15/ Faith's Phylogenetic Diversity #####
 
@@ -1023,7 +1027,8 @@ compute_Faith_PD <- function(proba_stack, phylo, quiet = F)
     }
     
     # Show k every 1000 iterations and save a backup
-    if ((k %% 1000 == 0) & !quiet) {
+    if ((k %% 1000 == 0) & !quiet) 
+    {
       cat(paste0(Sys.time(), " - ", k," on ",nrow(proba_mat),"\n"))
       # save(all_PD, file = "./outputs/Indices_Maps/PD_backup.RData")
     }
@@ -1501,23 +1506,52 @@ save(focal_betaphylodiversity, file = paste0("./outputs/Indices_maps/focal_betap
 compute_moving_betadiversity <- function (proba_stack, diversity_type = "taxo",
                                           phylo = NULL, index_family = "sorensen",
                                           beta_part = "turnover", aggreg_type = "all_pairwise",
-                                          window_width = "default", window_height = "default", # In pixels, extended from the focal point
+                                          resolution_factor = 1,  # Provide a factor to aggregate data if needed (could be necessary to reduce computation time for wide window size)
+                                          window_width = "default", window_height = "default", # In pixels. Must be an odd value if provided. Number of pixels after aggregation (if required)
                                           border_rule = NULL)  # Add an option on how to deal with the borders
 {
   cat(paste0(Sys.time(), " - Betadiversity Computation - Start\n"))
   
-  ### Adjust default window size to a fifth of raster width and height
+  ### Aggregate data if needed
+  
+  if (resolution_factor != 1)
+  {
+    # Function to compute probability of presence of at least one species/OMUs
+    aggreg_prob <- function(x, na.rm) 
+    { 
+      y <- 1 - prod(1 - x) # Probability of presence of ring = probability of presence of at least one species/OMU = opposite of probability of absence of all species/OMU
+      return(y) # Output
+    }
+    
+    proba_stack <- raster::aggregate(x = proba_stack,
+                                     fact = resolution_factor,
+                                     fun = aggreg_prob)
+  }
+
+  ### Adjust default window size to a fifth of the (aggregated) raster width and height
   
   if (window_width == "default")
   {
     window_width <- round(proba_stack@ncols/10)
-    if (window_width == 0) {window_width <- 1}
+    windows_width <- windows_width * 2 + 1
+    if (window_width == 0) {window_width <- 3}
   }
   if (window_height == "default")
   {
     window_height <- round(proba_stack@nrows/10)
-    if (window_height == 0) {window_height <- 1}
+    window_height <- windows_width * 2 + 1
+    if (window_height == 0) {window_height <- 3}
   }
+  
+  ### If provided, check that the window size parameters are odd integers
+  if (((window_width + 1) %% 2) != 0) 
+  {
+    stop("Window width must be an odd integer")
+  }
+  if (((window_height + 1) %% 2) != 0) 
+  {
+    stop("Window height must be an odd integer")
+  }  
   
   ### Prepare data
   
@@ -1559,10 +1593,10 @@ compute_moving_betadiversity <- function (proba_stack, diversity_type = "taxo",
     
     # Extract regional data
     regional_data <- raster::getValuesBlock(x = binary_stack, 
-                                            row = RowCol[1] - window_width,
-                                            col = RowCol[2] - window_height,
-                                            nrow = window_width*2 + 1,
-                                            ncol = window_height*2 + 1)
+                                            row = RowCol[1] - ((window_width - 1) / 2),
+                                            col = RowCol[2] - ((window_height - 1) / 2),
+                                            nrow = window_width,
+                                            ncol = window_height)
     ### Prepare assemblage data
     
     if (aggreg_type == "focal_pairwise") # For focal pairwise, need to put the focal site on the first row
@@ -1692,37 +1726,130 @@ source(file = "./functions/compute_betadiversity.R")
 
 ### 18.3.2/ Compute betadiversity with a moving window ####
 
+# Choose resolution
+resolution <- "3"
+resolution <- "5"
+resolution <- "11"
+resolution <- "17"
+
+# Run function
 moving_betadiversity <- compute_moving_betadiversity(sp_binary_stack, diversity_type = "taxo",
                                                      phylo = NULL, index_family = "sorensen",
                                                      beta_part = "turnover", aggreg_type = "all_pairwise",
-                                                     window_width = 1, window_height = 1, # In pixels, extended from the focal point
+                                                     resolution_factor = 1, 
+                                                     window_width = as.numeric(resolution),
+                                                     window_height = as.numeric(resolution), # In pixels, extended from the focal point
                                                      border_rule = NULL)  # Add an option on how to deal with the borders
+
+moving_betadiversity_focal <- compute_moving_betadiversity(sp_binary_stack, diversity_type = "taxo",
+                                                           phylo = NULL, index_family = "sorensen",
+                                                           beta_part = "turnover", aggreg_type = "focal_pairwise",
+                                                           resolution_factor = 1, 
+                                                           window_width = as.numeric(resolution),
+                                                           window_height = as.numeric(resolution), # In pixels, extended from the focal point
+                                                           border_rule = NULL)  # Add an option on how to deal with the borders
 
 
 moving_betaphylodiversity <- compute_moving_betadiversity(sp_binary_stack, diversity_type = "phylo",
                                                           phylo = phylogeny_object, index_family = "sorensen",
                                                           beta_part = "turnover", aggreg_type = "all_pairwise",
-                                                          window_width = 1, window_height = 1, # In pixels, extended from the focal point
+                                                          resolution_factor = 1, 
+                                                          window_width = as.numeric(resolution),
+                                                          window_height = as.numeric(resolution), # In pixels, extended from the focal point
                                                           border_rule = NULL)  # Add an option on how to deal with the borders
 
+moving_betaphylodiversity_focal <- compute_moving_betadiversity(sp_binary_stack, diversity_type = "phylo",
+                                                                phylo = phylogeny_object, index_family = "sorensen",
+                                                                beta_part = "turnover", aggreg_type = "focal_pairwise",
+                                                                resolution_factor = 1, 
+                                                                window_width = as.numeric(resolution),
+                                                                window_height = as.numeric(resolution), # In pixels, extended from the focal point
+                                                                border_rule = NULL)  # Add an option on how to deal with the borders
+
+# Plot raw maps
+plot(moving_betadiversity)
+plot(moving_betaphylodiversity)
+
+plot(moving_betadiversity_focal)
+plot(moving_betaphylodiversity_focal)
+
+# Manual threshold
 hist(moving_betadiversity[])
 hist(moving_betaphylodiversity[])
+hist(moving_betadiversity_focal[])
+hist(moving_betaphylodiversity_focal[])
 
-moving_betadiversity_contrasted <- contrasting_raster(x = moving_betadiversity, zmin = 0, zmax = 0.4)
-moving_betaphylodiversity_contrasted <- contrasting_raster(x = moving_betaphylodiversity, zmin = 0, zmax = 0.3)
+# Automatic threshold
+threshold <- round(x = quantile(x = moving_betadiversity[], p = 0.999, na.rm = T) * 10, digits = 0)/10 ; threshold
+threshold <- round(x = quantile(x = moving_betaphylodiversity[], p = 0.999, na.rm = T) * 10, digits = 0)/10  ; threshold
+threshold <- round(x = quantile(x = moving_betadiversity_focal[], p = 0.999, na.rm = T) * 10, digits = 0)/10  ; threshold
+threshold <- round(x = quantile(x = moving_betaphylodiversity_focal[], p = 0.999, na.rm = T) * 10, digits = 0)/10  ; threshold
 
+# Apply threshold
+moving_betadiversity_contrasted <- contrasting_raster(x = moving_betadiversity, zmin = 0, zmax = 0.6)
+moving_betaphylodiversity_contrasted <- contrasting_raster(x = moving_betaphylodiversity, zmin = 0, zmax = 0.4)
+moving_betadiversity_focal_contrasted <- contrasting_raster(x = moving_betadiversity_focal, zmin = 0, zmax = 0.6)
+moving_betaphylodiversity_focal_contrasted <- contrasting_raster(x = moving_betaphylodiversity_focal, zmin = 0, zmax = 0.4)
+
+# Plot contrasted maps
 plot(moving_betadiversity_contrasted)
 plot(moving_betaphylodiversity_contrasted)
 
-# Save
-save(moving_betadiversity, file = paste0("./outputs/Indices_maps/moving_betadiversity.RData"))
-save(moving_betaphylodiversity, file = paste0("./outputs/Indices_maps/moving_betaphylodiversity.RData"))
+plot(moving_betadiversity_focal_contrasted)
+plot(moving_betaphylodiversity_focal_contrasted)
 
-save(moving_betadiversity, file = paste0("./outputs/Indices_maps/moving_betadiversity_5x5.RData"))
-save(moving_betaphylodiversity, file = paste0("./outputs/Indices_maps/moving_betaphylodiversity_5x5.RData"))
+# Save any resolution
+# save(moving_betadiversity, file = paste0("./outputs/Indices_maps/moving_betadiversity_",resolution,"x",resolution,".RData"))
+# save(moving_betaphylodiversity, file = paste0("./outputs/Indices_maps/moving_betaphylodiversity_",resolution,"x",resolution,".RData"))
+# save(moving_betadiversity_focal, file = paste0("./outputs/Indices_maps/moving_betadiversity_focal_",resolution,"x",resolution,".RData"))
+# save(moving_betaphylodiversity_focal, file = paste0("./outputs/Indices_maps/moving_betaphylodiversity_focal_",resolution,"x",resolution,".RData"))
 
-load(file = paste0("./outputs/Indices_maps/moving_betadiversity.RData"))
-load(file = paste0("./outputs/Indices_maps/moving_betaphylodiversity.RData"))
+# Load any resolution
+load(file = paste0("./outputs/Indices_maps/moving_betadiversity_",resolution,"x",resolution,".RData"))
+load(file = paste0("./outputs/Indices_maps/moving_betaphylodiversity_",resolution,"x",resolution,".RData"))
+load(file = paste0("./outputs/Indices_maps/moving_betadiversity_",resolution,"x",resolution,"_focal.RData"))
+load(file = paste0("./outputs/Indices_maps/moving_betaphylodiversity_",resolution,"x",resolution,"_focal.RData"))
+
+
+## Export to build GIF
+
+# Export betadiversity all_pairwise
+pdf(file = paste0("./maps/Indices_maps/Betadiversity/moving_betadiversity_",resolution,"x",resolution,".pdf"),
+    width = 8, height = 8)
+# Apply threshold
+moving_betadiversity_contrasted <- contrasting_raster(x = moving_betadiversity, zmin = 0, zmax = 0.6)
+# Plot contrasted maps
+plot(moving_betadiversity_contrasted, main = paste0("Betadiversity \n(", resolution,"x",resolution,")"))
+dev.off()
+
+# Export betaphylodiversity all_pairwise
+pdf(file = paste0("./maps/Indices_maps/Betadiversity/moving_betaphylodiversity_",resolution,"x",resolution,".pdf"),
+    width = 8, height = 8)
+# Apply threshold
+moving_betaphylodiversity_contrasted <- contrasting_raster(x = moving_betaphylodiversity, zmin = 0, zmax = 0.4)
+# Plot contrasted maps
+plot(moving_betaphylodiversity_contrasted, main = paste0("Betaphlyodiversity \n(", resolution,"x",resolution,")"))
+dev.off()
+
+# Export betadiversity focal
+pdf(file = paste0("./maps/Indices_maps/Betadiversity/moving_betadiversity_",resolution,"x",resolution,"_focal.pdf"),
+    width = 8, height = 8)
+# Apply threshold
+moving_betadiversity_focal_contrasted <- contrasting_raster(x = moving_betadiversity_focal, zmin = 0, zmax = 0.6)
+# Plot contrasted maps
+plot(moving_betadiversity_focal_contrasted, main = paste0("Betadiversity focal \n(", resolution,"x",resolution,")"))
+dev.off()
+
+# Export betaphylodiversity focal
+pdf(file = paste0("./maps/Indices_maps/Betadiversity/moving_betaphylodiversity_",resolution,"x",resolution,"_focal.pdf"),
+    width = 8, height = 8)
+# Apply threshold
+moving_betaphylodiversity_focal_contrasted <- contrasting_raster(x = moving_betaphylodiversity_focal, zmin = 0, zmax = 0.4)
+# Plot contrasted maps
+plot(moving_betaphylodiversity_focal_contrasted, main = paste0("Betaphylodiversity focal \n(", resolution,"x",resolution,")"))
+dev.off()
+
+
 
 # #### Test for getValuesBlock border rules ####
 # 
@@ -2051,8 +2178,24 @@ plot(binary_stack)
 list_shp_regions <- list(Caatinga_shp, Caribbean_Islands_shp, full_CA_shp, Central_Andes_shp, Cerrado_shp, Chacos_shp, Coastal_desert_shp, Guyana_Shield_shp, Llanos_shp, Lower_Amazon_shp, Mata_Atlantica_shp5, Northern_Andes_shp, Pampas_shp, Pantanal_shp, Western_Amazon_shp, Western_Lowlands_shp)
 region_names <- c("Caatinga", "Caribbean_Islands", "Central_America", "Central_Andes", "Cerrado", "Chacos", "Coastal_desert", "Guyana_Shield", "Llanos", "Lower_Amazon", "Mata_Atlantica", "Northern_Andes", "Pampas", "Pantanal", "Western_Amazon", "Western_Lowlands")
 
+# ### Morrone's regions (dominion)
+# Morrone_dominions_shp_files <- readRDS(file = "./input_data/Map_stuff/Patricia_data/Morrone_dominions_shp_files.rds")
+# Morrone_dominions_names <- readRDS(Patricia_region_names, file = "./input_data/Map_stuff/Patricia_data/Morrone_dominions_names.rds")
+# ##
+
 # Compute the indices and generate maps
 within_regional_betadiversity <- compute_within_regional_betadiversity(sp_binary_stack, list_shp_regions, region_names,
+                                                                       subsample_size = 10000,
+                                                                       diversity_type = c("taxo", "phylo"),
+                                                                       # diversity_type = c("taxo"),
+                                                                       phylo = phylo, index_family = "sorensen",
+                                                                       beta_part = c("turnover"),
+                                                                       aggreg_type = c("mean_pairwise"),
+                                                                       regions_map = T,
+                                                                       output_type = "region_df",
+                                                                       quiet = F)
+
+Morrone_within_regional_betadiversity <- compute_within_regional_betadiversity(sp_binary_stack, Morrone_dominions_shp_files, Morrone_dominions_names,
                                                                        subsample_size = 10000,
                                                                        diversity_type = c("taxo", "phylo"),
                                                                        # diversity_type = c("taxo"),
@@ -2068,6 +2211,7 @@ plot(within_regional_betadiversity[[2]], zlim = c(0, 0.6))
 
 # Save
 save(within_regional_betadiversity, file = paste0("./outputs/Indices_maps/within_regional_betadiversity.RData"))
+save(Morrone_within_regional_betadiversity, file = paste0("./outputs/Indices_maps/Morrone_within_regional_betadiversity.RData"))
 
 # Compute differences per regions
 load(file = paste0("./outputs/Indices_maps/within_regional_betadiversity.RData"))
@@ -2396,7 +2540,9 @@ map_betadiversity_within_and_between_regions <- function (
   if (plot_type == "igraph")
   {
     # Build scale for edge color
-    standardized_edges <- round(c(region_matrix_between)/ max(c(region_matrix_between)) * 200)
+    edge_weights <- igraph::E(network)$weight
+    
+    standardized_edges <- round(edge_weights/ max(edge_weights) * 200)
     
     # Build scale for nod color
     standardized_nods <- round(region_df_within[,1]/ max(region_df_within[,1]) * 200)
@@ -2416,7 +2562,7 @@ map_betadiversity_within_and_between_regions <- function (
                          
                          # Edge style
                          edge.color = colorRampPalette(c("white", "orange", "red"))(200)[standardized_edges],
-                         edge.width = c(region_matrix_between)*edge_cex
+                         edge.width = standardized_edges / 200 * edge_cex
     )
   }
   
@@ -2491,6 +2637,9 @@ map_betadiversity_within_and_between_regions <- function (
   
 }
 
+library(tidyverse)
+library(ggraph)
+
 nod_cex <- 30
 edge_cex <- 1
 
@@ -2516,16 +2665,24 @@ map_betadiversity_within_and_between_regions (region_df_within = region_df_withi
                                               list_shp_regions, # To provide the list of SpatialPolygons of regions to extract centroid coordinates
                                               region_labels = region_labels, # To provide labels to use instead of full region names
                                               nod_cex = 50,
-                                              edge_cex = 12,
+                                              edge_cex = 2,
                                               plot_type = "ggplot")
 
 map_betadiversity_within_and_between_regions (region_df_within = region_df_within_taxo,   # To provide directly the df with indices values within each region. 2 columns: the region names, the index values
                                               region_matrix_between = region_df_between_taxo,  # To provide directly the matrix of betadiversity values between regions
                                               list_shp_regions, # To provide the list of SpatialPolygons of regions to extract centroid coordinates
                                               region_labels = region_labels, # To provide labels to use instead of full region names
-                                              nod_cex = 30,
-                                              edge_cex = 12,
+                                              nod_cex = 50,
+                                              edge_cex = 2,
                                               plot_type = "ggplot")
+
+map_betadiversity_within_and_between_regions (region_df_within = region_df_within_phylo,   # To provide directly the df with indices values within each region. 2 columns: the region names, the index values
+                                              region_matrix_between = region_df_between_phylo,  # To provide directly the matrix of betadiversity values between regions
+                                              list_shp_regions, # To provide the list of SpatialPolygons of regions to extract centroid coordinates
+                                              region_labels = region_labels, # To provide labels to use instead of full region names
+                                              nod_cex = 100,
+                                              edge_cex = 20,
+                                              plot_type = "igraph")
 
 
 ### 18.7/ Make the RGB visualization after NMDS in 3D for the full pairwise approach ####
@@ -2720,7 +2877,249 @@ save(betadiversity_RGB_map, file = paste0("./outputs/Indices_maps/betadiversity_
 save(betaphylodiversity_RGB_map, file = paste0("./outputs/Indices_maps/betaphylodiversity_RGB_map.RData"))
 
 
-##### 19/ Map residuals between two indices #####
+
+
+### 19/ Ist and Pst ####
+
+### 19.1/ Taxonomic and Phylogenetic partionning (Ist & Pst) ####
+
+### 19.1.1/ Function to compute Ist and Pst with a moving window ###
+
+# Size of the window, default as a proportion
+# Multi vs. mean pairwise
+
+### Can be improved by adding the option to compute for combination of parameters, all at the same time...
+
+
+### See the functions I created for Erika's project!
+
+##### Next step = mimicry Ist... but annoying because you have to recompute mimicry ring richness stack from OMU at each randomization...
+### Mimicry Ist is based on mimicry richness stack which must be recomputed each time. 
+
+compute_moving_diversity_partitioning <- function (proba_stack, diversity_type = "taxo",
+                                                   phylo = NULL, aggreg_type = "multi",
+                                                   resolution_factor = 1,  # Provide a factor to aggregate data if needed (could be necessary to reduce computation time for wide window size)
+                                                   window_width = "default", window_height = "default", # In pixels, extended from the focal point
+                                                   border_rule = NULL)  # Add an option on how to deal with the borders
+{
+  cat(paste0(Sys.time(), " - Index Computation - Start\n"))
+  
+  ### Aggregate data if needed
+  
+  if (resolution_factor != 1)
+  {
+    # Function to compute probability of presence of at least one species/OMUs
+    aggreg_prob <- function(x, na.rm) 
+    { 
+      y <- 1 - prod(1 - x) # Probability of presence of ring = probability of presence of at least one species/OMU = opposite of probability of absence of all species/OMU
+      return(y) # Output
+    }
+    
+    proba_stack <- raster::aggregate(x = proba_stack,
+                                     fact = resolution_factor,
+                                     fun = aggreg_prob)
+  }
+  
+  ### Adjust default window size to a fifth of the (aggregated) raster width and height
+  
+  if (window_width == "default")
+  {
+    window_width <- round(proba_stack@ncols/10)
+    windows_width <- windows_width * 2 + 1
+    if (window_width == 0) {window_width <- 3}
+  }
+  if (window_height == "default")
+  {
+    window_height <- round(proba_stack@nrows/10)
+    window_height <- windows_width * 2 + 1
+    if (window_height == 0) {window_height <- 3}
+  }
+  
+  ### If provided, check that the window size parameters are odd integers
+  if (((window_width + 1) %% 2) != 0) 
+  {
+    stop("Window width must be an odd integer")
+  }
+  if (((window_height + 1) %% 2) != 0) 
+  {
+    stop("Window height must be an odd integer")
+  }  
+  
+  # If using the phylogenetic beta-diversity, need to match raster Stack and phylogeny species lists
+  if (diversity_type == "phylo")
+  {
+    # Match raster Stack and Phylogeny species lists
+    clean_stack_and_phylo <- match_stack_and_phylo(proba_stack, phylo)
+    proba_stack <- clean_stack_and_phylo[[1]]
+    pruned_tree <- clean_stack_and_phylo[[2]]
+  }
+  
+  # Extract community matrix
+  proba_mat <- raster::getValues(proba_stack)
+  
+  
+  ###### IN PROGRESS #######
+  
+  ### Loop to move from pixel to pixel
+  all_index_values <- NA
+  for (i in 1:nrow(proba_stack))
+  {
+    # i <- 1
+    
+    # Initiate control for focal data and regional data
+    no_focal_data <- F
+    no_regional_data <- F
+    
+    # Extract cell location
+    RowCol <- raster::rowColFromCell(object = proba_stack, cell = i)
+    
+    ### Warning: Window size is reduced for right (add) and bottom borders (cutoff), but not for left and upper borders (shift window)
+    # Add an option on how to deal with the borders with border_rule
+    
+    # Extract regional data
+    regional_data <- raster::getValuesBlock(x = binary_stack, 
+                                            row = RowCol[1] - ((window_width - 1) / 2),
+                                            col = RowCol[2] - ((window_height - 1) / 2),
+                                            nrow = window_width,
+                                            ncol = window_height)
+    ### Prepare assemblage data
+    
+    if (aggreg_type == "focal_pairwise") # For focal pairwise, need to put the focal site on the first row
+    {
+      # Extract data from the focal site
+      ### Warning: does not work when the window reach the bottom border because extra rows are cut-off...
+      focal_data <- regional_data[ceiling(nrow(regional_data)/2), ]
+      # Check if focal site has data
+      if (any(is.na(focal_data)))
+      {
+        no_focal_data <- T
+        beta_value <- NA
+      }
+      
+      # Remove focal data from the regional data
+      regional_data_clean <- regional_data[-ceiling(nrow(regional_data)/2), ]
+      
+      # Clean sites with NA
+      regional_data_clean <- na.omit(regional_data_clean) 
+      
+      # Add the focal site on the first row
+      regional_data_clean <- rbind(focal_data, regional_data_clean)
+      
+    } else { # For other aggregation type, only need to clean sites with NA
+      # Clean sites with NA
+      regional_data_clean <- na.omit(regional_data) 
+    }
+    
+    ### Check there are at least two communities with data in the region
+    if (nrow(regional_data_clean) < 2)
+    {
+      no_regional_data <- T
+      beta_value <- NA
+    }
+    
+    ### Compute index if needed
+    
+    if (!no_focal_data & !no_regional_data)
+    {
+      # For taxonomic beta-diversity based on species identity
+      if (diversity_type == "taxo")
+      {
+        if (aggreg_type == "multi")
+        {
+          # Compute multi-sites taxonomic beta-diversity for all sites
+          beta_results <- betapart::beta.multi(x = regional_data_clean, index.family = index_family)
+        } else { 
+          # Compute pairwise taxonomic beta-diversity for all pairs of sites
+          beta_results <- betapart::beta.pair(x = regional_data_clean, index.family = index_family)
+        }
+      }
+      
+      # For phylogenetic beta-diversity based on Faith's Phylogenetic Diversity
+      if (diversity_type == "phylo")
+      {
+        if (aggreg_type == "multi")
+        {
+          # Compute multi-sites phylogenetic beta-diversity for all sites
+          beta_results <- betapart::phylo.beta.multi(x = regional_data_clean, tree = pruned_tree, index.family = index_family)
+        } else { 
+          # Compute pairwise phylogenetic beta-diversity for all pairs of sites
+          beta_results <- betapart::phylo.beta.pair(x = regional_data_clean, tree = pruned_tree, index.family = index_family)
+        }
+      }
+      
+      ### Extract results
+      
+      # Depending on the partition of beta-diversity
+      if (beta_part == "turnover") {beta_dist <- beta_results[[1]]}
+      if (beta_part == "nestedness") {beta_dist <- beta_results[[2]]}
+      if (beta_part == "total") {beta_dist <- beta_results[[3]]}
+      
+      # For multi-site index, pixel value is the multi-site beta-diversity
+      if (aggreg_type == "multi")
+      {
+        beta_value <- round(as.numeric(beta_dist), 5)
+      }
+      
+      # For pairwise index, pixel value is the mean pairwise beta-diversity across all pairs of regional sites
+      if (aggreg_type == "all_pairwise")
+      {
+        beta_value <- round(mean(beta_dist, na.rm = T), 5)
+      }
+      
+      # For focal pairwise index, pixel value is the mean pairwise beta-diversity of for all other regional sites in reference to the focal site
+      if (aggreg_type == "focal_pairwise")
+      {
+        beta_value <- round(mean(as.matrix(beta_dist)[1, -1], na.rm = T), 5)
+      }
+    }
+    
+    # Store value for that pixel
+    all_index_values[i] <- beta_value
+    
+    # Show i every 100 iterations and save a back-up file
+    if (i %% 100 == 0) 
+    {
+      cat(paste0(Sys.time(), " - ", i," on ",nrow(proba_stack),"\n"))
+      # save(all_FP, file = "./outputs/Indices_maps/backup_betadiversity_moving.RData")
+    }
+  }
+  
+  # Generate a mask for terrestrial areas
+  continental_mask <- (calc(proba_stack, fun = sum) >= 0) - 1
+  
+  # Write beta-diversity values in a raster without continental borders
+  betadiversity_raster_no_borders <- proba_stack[[1]]
+  betadiversity_raster_no_borders@data@values <- all_index_values
+  
+  # Apply continental mask to set NA pixels to NA values to avoid issue with extending borders due to the window
+  betadiversity_raster_no_borders[is.na(continental_mask[])] <- NA
+  
+  # Write beta-diversity values in a raster with null values as background for terrestrial areas to show terrestrial borders
+  betadiversity_raster <- continental_mask
+  betadiversity_raster@data@values[!(is.na(betadiversity_raster_no_borders@data@values) | is.nan(betadiversity_raster_no_borders@data@values))] <- betadiversity_raster_no_borders@data@values[!(is.na(betadiversity_raster_no_borders@data@values) | is.nan(betadiversity_raster_no_borders@data@values))]
+  
+  # Repair issue with min/max values
+  betadiversity_raster@data@max <- min(betadiversity_raster[], na.rm = T)
+  betadiversity_raster@data@max <- max(betadiversity_raster[], na.rm = T)
+  
+  return(betadiversity_raster)
+  
+  cat(paste0(Sys.time(), " - Betadiversity Computation - Done\n"))
+}
+
+source(file = "./functions/compute_betadiversity.R")
+
+### 19.1.2/ Compute Ist and Pst with a moving window ###
+
+### 19.2/ Mimicry turnover with mimicry Ist ####
+
+### 19.2.1/ Function to compute mimicry Ist ###
+
+### 19.2.2/ Compute mimicry Ist ###
+
+
+
+##### 20/ Map residuals between two indices #####
 
 # Input = two index rasters
 # Output = residuals Y ~ X
@@ -2732,12 +3131,13 @@ save(betaphylodiversity_RGB_map, file = paste0("./outputs/Indices_maps/betaphylo
 # Need to subsample to avoid spatial autocorrelation issues: N = 1000 or 1/10th of data
 # Random (multiple time) or regular ?
 
-### 19.1/ Function to compute and map residuals between two indices ####
+### 20.1/ Function to compute and map residuals between two indices ####
 
 library(tidyverse)
 
 map_residuals <- function (y_index, x_index, 
                            method = "GAM", # Either LM for linear relationship, LM_quadratic to add quadratic effects, or GLS to account for spatial autocorrelation, or GAM to allow non-linear relationship.
+                           gamma = 1,  # Smoothing parameter for GAM models. Higher than 1 = increase smoothness of the fit
                            corSpatial = "corExp", # To choose the type of spatial autocorrelation structure as in nlme::corSpatial()
                            subsample_size = NA,  # Number of sites to subsample
                            subsample_runs = 10,  # Number of random sample runs to aggregate
@@ -2779,7 +3179,7 @@ map_residuals <- function (y_index, x_index,
   
   if (method == "GAM")
   {
-    model <- mgcv::gam(data = indices_df, formula = y ~ s(x))
+    model <- mgcv::gam(data = indices_df, formula = y ~ s(x), gamma = gamma)
     
     # Extract R²
     R2 <- round(summary(model)$r.sq, 3)
@@ -2965,12 +3365,18 @@ map_residuals <- function (y_index, x_index,
 
 source(file = "./functions/compute_residuals.R")
 
-### 19.2/ Compute residuals ####
+### 20.2/ Compute residuals ####
 
-load(file = paste0("./outputs/Indices_maps/sp_richness.RData"))
-load(file = paste0("./outputs/Indices_maps/Faith_PD.RData"))
+### Should use SR only from species in the phylogeny to have the same species pool than PD
+sp_richness_phylo_only <- readRDS(file = paste0("./outputs/Indices_maps/phylo_only/tot.sp.richness_Jaccard.80_phylo.rds"))
+sp_richness <- readRDS(file = paste0("./outputs/Indices_maps/sp_richness.rds"))
+Faith_PD <- readRDS(file = paste0("./outputs/Indices_maps/Faith_PD.rds"))
 
-PD_SR_residuals <- map_residuals(y_index = Faith_PD, x_index = sp_richness, 
+plot(sp_richness)
+plot(sp_richness_phylo_only)
+plot(Faith_PD)
+
+PD_SR_residuals <- map_residuals(y_index = Faith_PD, x_index = sp_richness_phylo_only, 
                                  method = "GAM", # Either LM for linear relationship, LM_quadratic to add quadratic effects, or GLS to account for spatial autocorrelation, or GAM to allow non-linear relationship.
                                  corSpatial = "corExp", # To choose the type of spatial autocorrelation structure as in nlme::corSpatial()
                                  subsample_size = NA,  # Number of sites to subsample
@@ -2979,13 +3385,37 @@ PD_SR_residuals <- map_residuals(y_index = Faith_PD, x_index = sp_richness,
                                  scatterplot = T,  # To display the scatter plot with regression line and R²
                                  plot_variogram_correlogram = F) # To display the variogram and correlogram in case of spatial GLS
 
-load(file = paste0("./outputs/Indices_maps/sp_richness.RData"))
+
+sp_richness_phylo_only <- readRDS(file = paste0("./outputs/Indices_maps/phylo_only/tot.sp.richness_Jaccard.80_phylo.rds"))
+sp_richness <- readRDS(file = paste0("./outputs/Indices_maps/sp_richness.rds"))
+MPD <- readRDS(file = paste0("./outputs/Indices_maps/MPD.raster_Jaccard.80.rds"))
+
+synchro_stack <- virtualspecies::synchroniseNA(stack(sp_richness_phylo_only, MPD))
+sp_richness_phylo_only <- synchro_stack[[1]]
+MPD <- synchro_stack[[2]]
+
+names(sp_richness_phylo_only) <- "sp_richness"
+names(MPD) <- "MPD"
+
+MPD_SR_residuals <- map_residuals(y_index = MPD, x_index = sp_richness_phylo_only, 
+                                  method = "GAM", # Either LM for linear relationship, LM_quadratic to add quadratic effects, or GLS to account for spatial autocorrelation, or GAM to allow non-linear relationship.
+                                  gamma = 1, # Smoothing parameter for GAM models. Higher than 1 = increase smoothness of the fit
+                                  corSpatial = "corExp", # To choose the type of spatial autocorrelation structure as in nlme::corSpatial()
+                                  subsample_size = NA,  # Number of sites to subsample
+                                  subsample_runs = 10,  # Number of random sample runs to aggregate
+                                  include_model = F, # To include the fitted model in the output
+                                  scatterplot = T,  # To display the scatter plot with regression line and R²
+                                  plot_variogram_correlogram = F) # To display the variogram and correlogram in case of spatial GLS
+
+
+sp_richness_phylo_only <- readRDS(file = paste0("./outputs/Indices_maps/phylo_only/tot.sp.richness_Jaccard.80_phylo.rds"))
+sp_richness <- readRDS(file = paste0("./outputs/Indices_maps/sp_richness.rds"))
 load(file = paste0("./outputs/Indices_maps/ring_richness.RData"))
 
-names(sp_richness) <- "sp_richness"
+names(sp_richness_phylo_only) <- "sp_richness"
 names(ring_richness) <- "ring_richness"
 
-MR_SR_residuals <- map_residuals(y_index = ring_richness, x_index = sp_richness, 
+MR_SR_residuals <- map_residuals(y_index = ring_richness, x_index = sp_richness_phylo_only, 
                                  method = "GAM", # Either LM for linear relationship, LM_quadratic to add quadratic effects, or GLS to account for spatial autocorrelation, or GAM to allow non-linear relationship.
                                  corSpatial = "corExp", # To choose the type of spatial autocorrelation structure as in nlme::corSpatial()
                                  subsample_size = NA,  # Number of sites to subsample
@@ -2993,11 +3423,17 @@ MR_SR_residuals <- map_residuals(y_index = ring_richness, x_index = sp_richness,
                                  include_model = F, # To include the fitted model in the output
                                  scatterplot = T,  # To display the scatter plot with regression line and R²
                                  plot_variogram_correlogram = F) # To display the variogram and correlogram in case of spatial GLS
+
+
 
 load(file = paste0("./outputs/Indices_maps/moving_betadiversity.RData"))
 load(file = paste0("./outputs/Indices_maps/moving_betaphylodiversity.RData"))
 load(file = paste0("./outputs/Indices_maps/moving_betadiversity_5x5.RData"))
 load(file = paste0("./outputs/Indices_maps/moving_betaphylodiversity_5x5.RData"))
+load(file = paste0("./outputs/Indices_maps/moving_betadiversity_11x11.RData"))
+load(file = paste0("./outputs/Indices_maps/moving_betaphylodiversity_11x11.RData"))
+load(file = paste0("./outputs/Indices_maps/moving_betadiversity_17x17.RData"))
+load(file = paste0("./outputs/Indices_maps/moving_betaphylodiversity_17x17.RData"))
 
 TBD_PBD_residuals <- map_residuals(y_index = moving_betaphylodiversity, x_index = moving_betadiversity, 
                                    method = "GAM", # Either LM for linear relationship, LM_quadratic to add quadratic effects, or GLS to account for spatial autocorrelation, or GAM to allow non-linear relationship.
@@ -3009,18 +3445,21 @@ TBD_PBD_residuals <- map_residuals(y_index = moving_betaphylodiversity, x_index 
                                    plot_variogram_correlogram = F) # To display the variogram and correlogram in case of spatial GLS
 
 
-
+# Plot
 plot(PD_SR_residuals, main = "PD ~ SR residuals", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+plot(MPD_SR_residuals, main = "MPD ~ SR residuals", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200), zlim = c(-15, 15))
 plot(MR_SR_residuals, main = "MR ~ SR residuals", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-plot(TBD_PBD_residuals, main = "PBD ~ TBD residuals", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+plot(TBD_PBD_residuals, main = "PBD ~ TBD residuals", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200), zlim = c(-0.15, 0.15))
 
 
 # Save
 save(PD_SR_residuals, file = paste0("./outputs/Indices_maps/PD_SR_residuals.RData"))
+save(MPD_SR_residuals, file = paste0("./outputs/Indices_maps/MPD_SR_residuals.RData"))
 save(MR_SR_residuals, file = paste0("./outputs/Indices_maps/MR_SR_residuals.RData"))
 save(TBD_PBD_residuals, file = paste0("./outputs/Indices_maps/TBD_PBD_residuals.RData"))
 
 load(file = paste0("./outputs/Indices_maps/PD_SR_residuals.RData"))
+load(file = paste0("./outputs/Indices_maps/MPD_SR_residuals.RData"))
 load(file = paste0("./outputs/Indices_maps/MR_SR_residuals.RData"))
 load(file = paste0("./outputs/Indices_maps/TBD_PBD_residuals.RData"))
 
@@ -3031,9 +3470,9 @@ load(file = paste0("./outputs/Indices_maps/TBD_PBD_residuals.RData"))
 # test_blue <- (moving_betaphylodiversity < 0.25) & (moving_betadiversity > 0.45)
 # plot(test_blue)
 
-### 19.3/ Residuals within regions ####
+### 20.3/ Residuals within regions ####
 
-# 19.3.1/ Function to compute residuals within regions
+# 20.3.1/ Function to compute residuals within regions
 
 map_residuals_within_regions <- function (y_index, x_index, 
                                           list_shp_regions, # Provide region Spatial Polygon to define borders
@@ -3291,13 +3730,15 @@ map_residuals_within_regions <- function (y_index, x_index,
 
 source(file = "./functions/compute_residuals.R")
 
-# 19.3.2/ Compute residuals within regions
+# 20.3.2/ Compute residuals within regions
 
 
 # Load within betadiversity
 load(file = paste0("./outputs/Indices_maps/within_regional_betadiversity.RData"))
 TBD_within_regions <- within_regional_betadiversity[[2]][[1]]
 PBD_within_regions <- within_regional_betadiversity[[2]][[2]]
+
+### Should use TBD only from species in the phylogeny to have the same species pool than TBD
 
 # Compute
 PBD_TBD_regions_residuals <- map_residuals_within_regions (y_index = PBD_within_regions,
@@ -3318,24 +3759,37 @@ save(PBD_TBD_regions_residuals, file = paste0("./outputs/Indices_maps/PBD_TBD_re
 load(file = paste0("./outputs/Indices_maps/PBD_TBD_regions_residuals.RData"))
 
 
-##### 20/ Map SES-values #####
+##### 21/ Map SES-values #####
 
 # SES-tests to account for deviance (Leprieur et al., 2012 ; Rosauer & Jetz, 2014). 
 # Need to design a specific one for each case depending on the null model for randomization
-# For PD vs. SR => randomize names in the phylogeny before recomputing PD
+  # Can select the type of null model:
+    # "keep_phylo" = randomize tips on the tree. Keep the initial phylogeny
+    # "Yule" = generate random phylogenies based on a Yule birth_only model parametrized on the phylogeny
+    # "BD" = generate random phylogenies based on a Birth-Death model parametrized on the phylogeny
+    # "AIC_selection" = chose between a Yule and a Birth-Death model based on AIC
+# Can provide an additionnal parameter for subsampling in case you do not have data for all species in the studied clade
+  # nsp_tot = total number of extant species in the studied clade (including the one absent from the phylogeny)
+
+# For PD/MPD/TBD vs. SR => randomize names in the phylogeny OR generate phylogeny from null model before recomputing PD/MPD/TPD
 # For mimetic richness vs. SR => randomize mimicry membership and recompute mimicry richness
+
 # Two options for the output 
-# Report the SES value normalized according to the mean and sd of the null distribution
-# Report the quantile
+  # Report the SES value normalized according to the mean and sd of the null distribution
+  # Report the quantile
 
-### 20.1/ SES-PD according to SR ####
+### 21.1/ SES-PD according to SR ####
 
-### 20.1.1/ Function to map SES-PD according to SR ####
+### 21.1.1/ Function to map SES-PD according to SR ####
 
 compute_SES_Faith_PD_vs_SR <- function (proba_stack, phylo, seed = 1, # Set seed to ensure reproducibility
+                                        null_model = "keep_phylo",  # "keep_phylo" , "Yule", "BD", "AIC_selection"
+                                        nsp_tot = NULL, # To provide the total number of species in the clade for subsampling in case data do not encompasses all species in the studied clade
                                         randomizations = 999, # To select the number of randomization
                                         alpha = 0.05,  # Threshold for significance for a two-sided test
                                         export_null_rasters = F, # Include the raster Stack of PD obtained from randomization in the output
+                                        export_null_model = F, # Include the best fitted model for simulating phylogeny
+                                        plot_maps = T, # To plot the SES-maps
                                         plot_distri = T, # To plot the null distribution for an "average" community as an example
                                         example_coords = NULL) # To provide the coordinates of the community to use as example, otherwise a community with median species richness is used.
 {
@@ -3352,24 +3806,96 @@ compute_SES_Faith_PD_vs_SR <- function (proba_stack, phylo, seed = 1, # Set seed
   Faith_PD_obs <- compute_Faith_PD(proba_stack = proba_stack_for_phylo, phylo = pruned_tree, quiet = T)
   names(Faith_PD_obs) <- "Faith_PD_obs"
   
-  # Loop for each randomization
+  ### Prepare null model for phylogeny generation
+  
+  # Compute the incomplete sampling fraction (i.e., proportion of species present in the tree vs. actual number of species in the clade)
+  if (is.null(nsp_tot))  # If no total number of species is provided, we assume the phylogeny is complete
+  { 
+    nsp_tot <- length(phylo$tip.label)
+  } 
+  sampling_fraction <- length(phylo$tip.label) / nsp_tot 
+  if (sampling_fraction > 1) { stop("'nsp_tot' must be higher than the number of tips in the phylogeny\nIf your phylogeny includes species outside of the studied clade, please remove them before running the function") }
+  
+  # Null model based on Yule Birth-only model to generate random phylogeny
+  if (null_model %in% c("Yule", "AIC_selection"))
+  {
+    fit_Yule <- phytools::fit.yule(tree = phylo, rho = sampling_fraction)
+    print(fit_Yule)
+    
+    if (null_model == "Yule")
+    {
+      best_fit <- fit_Yule
+    }
+  }
+  
+  # Null model based on Birth-Death model to generate random phylogeny
+  if (null_model %in% c("BD", "AIC_selection"))
+  {
+    fit_BD <- phytools::fit.bd(tree = phylo, rho = sampling_fraction)
+    print(fit_BD)
+    
+    if (null_model == "BD")
+    {
+      best_fit <- fit_BD
+    }
+  }
+  
+  # Chose the best model based on AIC
+  if (null_model == "AIC_selection")
+  {
+    AIC_df <- AIC(fit_Yule, fit_BD) ; print(AIC_df)
+    best_fit <- list(fit_Yule, fit_BD)[[which.min(AIC_df$AIC)]]
+  }
+  
+  ### Loop for each randomization
   PD_stack <- stack(Faith_PD_obs)
   for (i in 1:randomizations)
   {
-    cat(paste0(Sys.time(), " - Randomization - ", i," on ",randomizations,"\n"))
+    cat(paste0("\n", Sys.time(), " - Randomization - ", i," on ",randomizations,"\n"))
     
-    # Randomize species in the phylogeny
-    random_phylo <- pruned_tree
-    random_phylo$tip.label <- sample(random_phylo$tip.label)
+    ### Generate phylogeny for the null model
     
-    # Compute Faith_PD for this randomized phylogeny
+    # Null model based on tip randomization
+    if (null_model == "keep_phylo")
+    {
+      # Randomize species in the phylogeny
+      random_phylo <- pruned_tree
+      random_phylo$tip.label <- sample(random_phylo$tip.label)
+    }
+    
+    # Null model based on Yule or Birth-Death model
+    if (null_model %in% c("Yule", "BD", "AIC_selection"))
+    {
+      # Generate the phylogeny
+      # ?phytools::pbtree
+      
+      full_tree <- phytools::pbtree(n = nsp_tot,
+                                    b = best_fit$b,
+                                    d = best_fit$d,
+                                    nsim = 1,
+                                    type = "continuous",
+                                    extant.only = T)
+      
+      # Recale so the root has the same age than the initial phylogeny
+      initial_phylo_depth <- max(ape::node.depth.edgelength(phylo))
+      full_tree_rescaled <- geiger::rescale(x = full_tree, model = "depth", depth = initial_phylo_depth)
+      
+      # plot(random_phylo)
+      
+      # Trim the proper subsample of species
+      random_phylo <- ape::keep.tip(full_tree_rescaled, sample(x = 1:nsp_tot, size = length(pruned_tree$tip.label)))
+      random_phylo$tip.label <- sample(pruned_tree$tip.label)
+    }
+    
+    ### Compute Faith_PD for this randomized phylogeny
     random_PD <- compute_Faith_PD(proba_stack_for_phylo, random_phylo, quiet = T)
     names(random_PD) <- paste0("Faith_PD_random_", i)
     
-    # Add to the final Raster Stack
+    ### Add to the final Raster Stack
     PD_stack <- addLayer(PD_stack, random_PD)
   }
   
+  ### Plot null distribution for a community if requested
   if(plot_distri)
   {
     # If no example community is provided
@@ -3501,45 +4027,364 @@ compute_SES_Faith_PD_vs_SR <- function (proba_stack, phylo, seed = 1, # Set seed
   p_value_signif <- raster::cover(raster::cover(p_value_signif_lower, p_value_signif_upper), (continental_mask + 0.5))
   
   ### Plot the four raster Layers
-  par(mfrow = c(2,2))
   
-  plot(SES_raster, main = "SES-PD", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  plot(SES_signif, main = paste0("SES-PD significant areas\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  
-  plot(p_value_raster, zlim = c(0, 1), main = paste0("p-values from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  plot(p_value_signif, zlim = c(0, 1), main = paste0("Significant areas from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  
-  par(mfrow = c(1,1))
+  if(plot_maps)
+  {
+    par(mfrow = c(2,2))
+    
+    plot(SES_raster, main = "SES-PD", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(SES_signif, main = paste0("SES-PD significant areas\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    plot(p_value_raster, zlim = c(0, 1), main = paste0("p-values from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(p_value_signif, zlim = c(0, 1), main = paste0("Significant areas from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    par(mfrow = c(1,1))
+  }
   
   ### Export
   
   final_output <- list(SES_raster, SES_signif, p_value_raster, p_value_signif)
   # Include the Stack of randomized community if requested
   if (export_null_rasters) { final_output <- append(final_output, list(PD_stack)) }
-  
+  # Include best null model for phylogeny simulation if requested
+  if (null_model %in% c("Yule", "BD", "AIC_selection"))
+  {
+    if (export_null_model) { final_output <- append(final_output, list(best_fit)) }
+  }
+
   return(final_output)
   
 }
 
 source(file = "./functions/compute_SES_tests.R")
 
-### 20.1.2/ Map SES-PD according to SR ####
+### 21.1.2/ Map SES-PD according to SR ####
 
 SES_Faith_PD_vs_SR <- compute_SES_Faith_PD_vs_SR(sp_proba_stack, phylo, seed = 1,
+                                                 null_model = "keep_phylo",
                                                  randomizations = 99, # To select the number of randomization
                                                  alpha = 0.05,  # Thresold for significance for a two-sided test
                                                  export_null_rasters = F, # Include the raster Stack of PD obtained from randomization in the output
                                                  plot_distri = T) # To plot the null distribution for an "average" community as an example
 
+SES_Faith_PD_vs_SR_model <- compute_SES_Faith_PD_vs_SR(sp_proba_stack, phylo, seed = 1,
+                                                       null_model = "AIC_selection",  # "keep_phylo" , "Yule", "BD", "AIC_selection"
+                                                       nsp_tot = 396, # To provide the total number of species in the clade for subsampling in case data do not encompasses all specie sin the studied clade
+                                                       randomizations = 99, # To select the number of randomization
+                                                       alpha = 0.05,  # Thresold for significance for a two-sided test
+                                                       export_null_rasters = F, # Include the raster Stack of PD obtained from randomization in the output
+                                                       plot_distri = T) # To plot the null distribution for an "average" community as an example
 
 # Save
 save(SES_Faith_PD_vs_SR, file = paste0("./outputs/Indices_maps/SES_Faith_PD_vs_SR.RData"))
+save(SES_Faith_PD_vs_SR_model, file = paste0("./outputs/Indices_maps/SES_Faith_PD_vs_SR_model.RData"))
+
+# Load
+load(file = paste0("./outputs/Indices_maps/SES_Faith_PD_vs_SR.RData"))
+load(file = paste0("./outputs/Indices_maps/SES_Faith_PD_vs_SR_model.RData"))
 
 
 
-### 20.2/ SES-PBD according to TBD ####
+### 21.2/ SES-MPD according to SR ####
 
-### 20.2.1/ Function to compute SES-PBD according to TBD ####
+### 21.2.1/ Function to map SES-MPD according to SR ####
+
+compute_SES_MPD_vs_SR <- function (proba_stack, phylo, seed = 1, # Set seed to ensure reproducibility
+                                   null_model = "keep_phylo",  # "keep_phylo" , "Yule", "BD", "AIC_selection"
+                                   nsp_tot = NULL, # To provide the total number of species in the clade for subsampling in case data do not encompasses all species in the studied clade
+                                   randomizations = 999, # To select the number of randomization
+                                   quiet = T, # To display or not internal progress for each MPD computation
+                                   alpha = 0.05,  # Threshold for significance for a two-sided test
+                                   export_null_rasters = F, # Include the raster Stack of PD obtained from randomization in the output
+                                   export_null_model = F, # Include the best fitted model for simulating phylogeny
+                                   plot_maps = T, # To plot the SES-maps
+                                   plot_distri = T, # To plot the null distribution for an "average" community as an example
+                                   example_coords = NULL) # To provide the coordinates of the community to use as example, otherwise a community with median species richness is used.
+{
+  # Set the random seed for reproducibility
+  set.seed(seed = seed)
+  
+  # Match raster Stack and Phylogeny species lists
+  clean_stack_and_phylo <- match_stack_and_phylo(proba_stack, phylo)
+  proba_stack_for_phylo <- clean_stack_and_phylo[[1]]
+  pruned_tree <- clean_stack_and_phylo[[2]]
+  
+  # Compute observed MPD
+  cat(paste0(Sys.time(), " - Compute observed MPD\n"))
+  MPD_obs <- compute_MPD(proba_stack = proba_stack_for_phylo, phylo = pruned_tree, quiet = quiet)
+  names(MPD_obs) <- "MPD_obs"
+  
+  ### Prepare null model for phylogeny generation
+  
+  # Compute the incomplete sampling fraction (i.e., proportion of species present in the tree vs. actual number of species in the clade)
+  if (is.null(nsp_tot))  # If no total number of species is provided, we assume the phylogeny is complete
+  { 
+    nsp_tot <- length(phylo$tip.label)
+  } 
+  sampling_fraction <- length(phylo$tip.label) / nsp_tot 
+  if (sampling_fraction > 1) { stop("'nsp_tot' must be higher than the number of tips in the phylogeny\nIf your phylogeny includes species outside of the studied clade, please remove them before running the function") }
+  
+  # Null model based on Yule Birth-only model to generate random phylogeny
+  if (null_model %in% c("Yule", "AIC_selection"))
+  {
+    fit_Yule <- phytools::fit.yule(tree = phylo, rho = sampling_fraction)
+    print(fit_Yule)
+    
+    if (null_model == "Yule")
+    {
+      best_fit <- fit_Yule
+    }
+  }
+  
+  # Null model based on Birth-Death model to generate random phylogeny
+  if (null_model %in% c("BD", "AIC_selection"))
+  {
+    fit_BD <- phytools::fit.bd(tree = phylo, rho = sampling_fraction)
+    print(fit_BD)
+    
+    if (null_model == "BD")
+    {
+      best_fit <- fit_BD
+    }
+  }
+  
+  # Chose the best model based on AIC
+  if (null_model == "AIC_selection")
+  {
+    AIC_df <- AIC(fit_Yule, fit_BD) ; print(AIC_df)
+    best_fit <- list(fit_Yule, fit_BD)[[which.min(AIC_df$AIC)]]
+  }
+  
+  
+  ### Loop for each randomization
+  MPD_stack <- stack(MPD_obs)
+  for (i in 1:randomizations)
+  {
+    cat(paste0(Sys.time(), " - Randomization - ", i," on ",randomizations,"\n"))
+    
+    ## Generate phylogeny for the null model
+    
+    # Null model based on tip randomization
+    if (null_model == "keep_phylo")
+    {
+      # Randomize species in the phylogeny
+      random_phylo <- pruned_tree
+      random_phylo$tip.label <- sample(random_phylo$tip.label)
+    }
+    
+    # Null model based on Yule or Birth-Death model
+    if (null_model %in% c("Yule", "BD", "AIC_selection"))
+    {
+      # Generate the phylogeny
+      # ?phytools::pbtree
+      
+      full_tree <- phytools::pbtree(n = nsp_tot,
+                                    b = best_fit$b,
+                                    d = best_fit$d,
+                                    nsim = 1,
+                                    type = "continuous",
+                                    extant.only = T)
+      
+      # Recale so the root has the same age than the initial phylogeny
+      initial_phylo_depth <- max(ape::node.depth.edgelength(phylo))
+      full_tree_rescaled <- geiger::rescale(x = full_tree, model = "depth", depth = initial_phylo_depth)
+      
+      # plot(random_phylo)
+      
+      # Trim the proper subsample of species
+      random_phylo <- ape::keep.tip(full_tree_rescaled, sample(x = 1:nsp_tot, size = length(pruned_tree$tip.label)))
+      random_phylo$tip.label <- sample(pruned_tree$tip.label)
+    }
+    
+    ## Compute MPD for this randomized phylogeny
+    random_MPD <- compute_MPD(proba_stack_for_phylo, random_phylo, quiet = quiet)
+    names(random_MPD) <- paste0("MPD_random_", i)
+    
+    ## Add to the final Raster Stack
+    MPD_stack <- addLayer(MPD_stack, random_MPD)
+  }
+  
+  ### Plot null distribution for a community if requested
+  if(plot_distri)
+  {
+    # If no example community is provided
+    if (is.null(example_coords))
+    {
+      # Sample an "average" community
+      com_ranks <- rank(MPD_obs[], ties.method = "random", na.last = "keep")
+      sample_com_index <- which(round(median(com_ranks, na.rm = T)) == com_ranks)
+      
+      # Get its coordinates
+      sample_com_coords <- round(raster::xyFromCell(object = MPD_obs, cell = sample_com_index),3)
+      
+    } else { # If the example community coordinates are provided
+      
+      sample_com_coords <- example_coords
+      
+      # Use the provided coordinates to retrieve its index
+      sample_com_index <- raster::cellFromXY(object = MPD_obs, xy = sample_com_coords)
+    }
+    
+    # Extract statistics
+    com_null_distri <- getValues(MPD_stack)[sample_com_index, ]
+    com_MPD_obs <- com_null_distri[1]
+    mean_null_value <- mean(com_null_distri, na.rm = T)
+    Q2.5_value <- quantile(com_null_distri, 0.025, na.rm = T)
+    Q97.5_value <- quantile(com_null_distri, 0.975, na.rm = T)
+    p_value <- round(ecdf(x = com_null_distri)(com_MPD_obs), 3)
+    SES_value <- round((com_MPD_obs - mean_null_value) / sd(com_null_distri), 3)
+    
+    # Plot null distribution for an "average" community
+    y_counts <- hist(com_null_distri, breaks = 30, plot = F)$counts
+    hist(com_null_distri,
+         breaks = 30, freq = TRUE, col = "gray", 
+         main = paste0("Null distribution of the MPD in a community\nLatitude: ", sample_com_coords[2], "; Longitude: ", sample_com_coords[1]), 
+         xlab = "Mean pairwise Phylogenetic Distance  [My]",
+         cex.axis = 1.5, cex.lab = 1.3, cex.main = 1.6, lwd = 2)
+    arrows(x0 = com_MPD_obs, y0 = max(y_counts)*0.5, x1 = com_MPD_obs, y1 = max(y_counts)*0.1, length = 0.1, lwd = 3)
+    abline(v = mean(com_null_distri), lty = 2, lwd = 2)
+    abline(v = Q2.5_value, lty = 2, lwd = 2, col = "red")
+    abline(v = Q97.5_value, lty = 2, lwd = 2, col = "red")
+    
+    # Insert mean and quantiles legend
+    legend(legend = c(paste0("Mean = ", format(round(mean_null_value, 1), nsmall = 1)), 
+                      paste0("CI 2.5% = ", format(round(Q2.5_value, 1), nsmall = 1)),
+                      paste0("CI 97.5% = ", format(round(Q97.5_value, 1), nsmall = 1))), 
+           x = "topright", inset = c(0.02, 0.02), y.intersp = 1.2, lty = 2 , lwd = 2,
+           col = c("black", "red"), cex = 1.2, bty = "o", bg = "white", box.col = NA)
+    
+    # Insert MPD obs, SES and p-value legend
+    legend(legend = c(paste0("MPD obs = ", round(com_MPD_obs, 2)),
+                      paste0("SES-MPD = ", format(SES_value, nsmall = 3)),
+                      paste0("p = ", format(p_value, nsmall = 3))),
+           x = "topleft", inset = c(0.02, 0.02),
+           cex = 1.2, xjust = 1, bty = "o", bg = "white", box.col = NA)
+  }
+  
+  ### Compute SES-values
+  
+  # Compute the mean of the null distribution
+  mean_null_raster <- raster::calc(x = MPD_stack, fun = mean, na.rm = T)
+  # Compute the sd of the null distribution
+  sd_null_raster <- raster::calc(x = MPD_stack, fun = sd, na.rm = T)
+  # Compute the SES-values
+  SES_raster <- round(((MPD_obs - mean_null_raster) / sd_null_raster), 3)
+  
+  ### Apply threshold to display only significant areas
+  
+  # Compute thresholds from alpha level
+  threshold_lower <- qnorm(p = alpha/2, mean = 0, sd = 1, lower.tail = T)
+  threshold_upper <- qnorm(p = alpha/2, mean = 0, sd = 1, lower.tail = F)
+  
+  # Create background raster
+  continental_mask <- (SES_raster < Inf) - 1
+  
+  # Create masks
+  SES_signif_lower_mask <- SES_raster < threshold_lower
+  SES_signif_lower_mask[SES_signif_lower_mask[] == 0] <- NA
+  SES_signif_upper_mask <- SES_raster > threshold_upper
+  SES_signif_upper_mask[SES_signif_upper_mask[] == 0] <- NA
+  
+  # Apply masks
+  SES_signif_lower <- raster::mask(x = SES_raster, mask = SES_signif_lower_mask)
+  SES_signif_upper <- raster::mask(x = SES_raster, mask = SES_signif_upper_mask)
+  
+  # Aggregate all-in-one
+  SES_signif <- mask(x = calc(stack(SES_signif_lower, SES_signif_upper), fun = sum, na.rm = T), continental_mask)
+  
+  ### Compute p-value
+  
+  # Loop per community
+  MPD_stack_values <- raster::getValues(MPD_stack)
+  all_p_values <- NA
+  for (i in 1:nrow(MPD_stack_values))
+  {
+    # Extract community data
+    com_data <- MPD_stack_values[i, ]
+    
+    # Check presence of data
+    if(!any(is.na(com_data)) & (com_data[1] > 0))
+    {
+      # Compute p-value for this community
+      com_p_value <- round(ecdf(x = com_data)(com_data[1]), 3)
+      all_p_values[i] <- com_p_value
+    } else {
+      # Provide NA if no data
+      all_p_values[i] <- NA
+    }
+  }
+  
+  # Put in raster
+  p_value_raster <- continental_mask
+  p_value_raster@data@values[!is.na(all_p_values)] <- all_p_values[!is.na(all_p_values)]
+  
+  ### Apply threshold to display only significant areas
+  
+  # Create masks
+  p_value_signif_lower_mask <- p_value_raster < (alpha/2)
+  p_value_signif_lower_mask[p_value_signif_lower_mask[] == 0] <- NA
+  p_value_signif_upper_mask <- p_value_raster > (1-(alpha/2))
+  p_value_signif_upper_mask[p_value_signif_upper_mask[] == 0] <- NA
+  
+  # Apply masks
+  p_value_signif_lower <- raster::mask(x = p_value_raster, mask = p_value_signif_lower_mask)
+  p_value_signif_upper <- raster::mask(x = p_value_raster, mask = p_value_signif_upper_mask)
+  
+  # Aggregate all-in-one
+  # p_value_signif <- mask(x = calc(stack(p_value_signif_lower, p_value_signif_lower), fun = sum, na.rm = T), continental_mask)
+  # Fix non-significant value to 0.5 to improve plot
+  p_value_signif <- raster::cover(raster::cover(p_value_signif_lower, p_value_signif_upper), (continental_mask + 0.5))
+  
+  ### Plot the four raster Layers
+  
+  if (plot_maps)
+  {
+    par(mfrow = c(2,2))
+    
+    plot(SES_raster, main = "SES-MPD", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(SES_signif, main = paste0("SES-MPD significant areas\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    plot(p_value_raster, zlim = c(0, 1), main = paste0("p-values from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(p_value_signif, zlim = c(0, 1), main = paste0("Significant areas from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    par(mfrow = c(1,1))
+  }
+
+  ### Export
+  
+  final_output <- list(SES_raster, SES_signif, p_value_raster, p_value_signif)
+  # Include the Stack of randomized community if requested
+  if (export_null_rasters) { final_output <- append(final_output, list(PD_stack)) }
+  # Include best null model for phylogeny simulation if requested
+  if (null_model %in% c("Yule", "BD", "AIC_selection"))
+  {
+    if (export_null_model) { final_output <- append(final_output, list(best_fit)) }
+  }
+
+  return(final_output)
+  
+}
+
+source(file = "./functions/compute_SES_tests.R")
+
+### 21.1.2/ Map SES-MPD according to SR ####
+
+SES_MPD_vs_SR <- compute_SES_MPD_vs_SR(proba_stack = sp_proba_stack,
+                                       phylo = Ithomiini_phylo, seed = 1,
+                                       randomizations = 9, # To select the number of randomization
+                                       alpha = 0.05,  # Threshold for significance for a two-sided test
+                                       export_null_rasters = F, # Include the raster Stack of PD obtained from randomization in the output
+                                       plot_distri = T) # To plot the null distribution for an "average" community as an example
+
+
+# Save
+save(SES_MPD_vs_SR, file = paste0("./outputs/Indices_maps/SES_MPD_vs_SR.RData"))
+
+
+
+### 21.3/ SES-PBD according to TBD ####
+
+### 21.3.1/ Function to compute SES-PBD according to TBD ####
 
 compute_SES_PBD_vs_TBD <- function (proba_stack, phylo, 
                                     index_family = "sorensen", # Chose the family of Beta-diversity indices
@@ -3550,6 +4395,7 @@ compute_SES_PBD_vs_TBD <- function (proba_stack, phylo,
                                     randomizations = 999, # To select the number of randomization
                                     alpha = 0.05,  # Threshold for significance for a two-sided test
                                     export_null_rasters = F, # Include the raster Stack of PBD obtained from randomization in the output
+                                    plot_maps = T, # To plot the SES-maps
                                     plot_distri = T, # To plot the null distribution for an "average" community as an example
                                     example_coords = NULL) # To provide the coordinates of the community to use as example, otherwise a community with median species richness is used.
 {
@@ -3730,15 +4576,20 @@ compute_SES_PBD_vs_TBD <- function (proba_stack, phylo,
   p_value_signif <- raster::cover(raster::cover(p_value_signif_lower, p_value_signif_upper), (continental_mask + 0.5))
   
   ### Plot the four raster Layers
-  par(mfrow = c(2,2))
   
-  plot(SES_raster, main = "SES-PBD", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  plot(SES_signif, main = paste0("SES-PBD significant areas\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  
-  plot(p_value_raster, zlim = c(0, 1), main = paste0("p-values from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  plot(p_value_signif, zlim = c(0, 1), main = paste0("Significant areas from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  
-  par(mfrow = c(1,1))
+  if (plot_maps)
+  {
+    par(mfrow = c(2,2))
+    
+    plot(SES_raster, main = "SES-PBD", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(SES_signif, main = paste0("SES-PBD significant areas\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    plot(p_value_raster, zlim = c(0, 1), main = paste0("p-values from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(p_value_signif, zlim = c(0, 1), main = paste0("Significant areas from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    par(mfrow = c(1,1))
+  }
+
   
   ### Export
   
@@ -3752,7 +4603,7 @@ compute_SES_PBD_vs_TBD <- function (proba_stack, phylo,
 
 source(file = "./functions/compute_SES_tests.R")
 
-### 20.2.2/ Map SES-PBD according to TBD ####
+### 21.3.2/ Map SES-PBD according to TBD ####
 
 SES_PBD_vs_TBD <- compute_SES_PBD_vs_TBD(binary_stack, phylo, 
                                          index_family = "sorensen", # Chose the family of Beta-diversity indices
@@ -3771,9 +4622,9 @@ save(SES_PBD_vs_TBD, file = paste0("./outputs/Indices_maps/SES_PBD_vs_TBD.RData"
 # save(SES_PBD_vs_TBD, file = paste0("./outputs/Indices_maps/SES_PBD_vs_TBD_5x5.RData"))
 
 
-### 20.3/ SES-PBD according to TBD within regions ####
+### 21.4/ SES-PBD according to TBD within regions ####
 
-### 20.3.1/ Function to compute SES-PBD according to TBD within regions ####
+### 21.4.1/ Function to compute SES-PBD according to TBD within regions ####
 
 
 compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_shp_regions, region_names,
@@ -3787,6 +4638,7 @@ compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_shp_regions
                                                    alpha = 0.05,  # Threshold for significance for a two-sided test
                                                    export_null_df = F, # To include the df with indices values from all randomization in the output
                                                    export_region_stats_df = T, # To include the df with statistics from the SES-tests for each region
+                                                   plot_maps = T, # To plot the SES-maps
                                                    plot_distri = T, # To plot the null distribution for an "average" community as an example
                                                    example_region_name = NULL) # To provide the name of the region to use as example. Otherwise it is randomly chosen.
 {
@@ -4039,16 +4891,20 @@ compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_shp_regions
   p_value_signif <- raster::cover(raster::cover(p_value_signif_lower, p_value_signif_upper), (continental_mask + 0.5))
   
   ### Plot the four raster Layers
-  par(mfrow = c(2,2))
   
-  plot(SES_raster, main = "SES-PBD", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  plot(SES_signif, main = paste0("SES-PBD significant areas\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  
-  plot(p_value_raster, zlim = c(0, 1), main = paste0("p-values from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  plot(p_value_signif, zlim = c(0, 1), main = paste0("Significant areas from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  
-  par(mfrow = c(1,1))
-  
+  if (plot_maps)
+  {
+    par(mfrow = c(2,2))
+    
+    plot(SES_raster, main = "SES-PBD", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(SES_signif, main = paste0("SES-PBD significant areas\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    plot(p_value_raster, zlim = c(0, 1), main = paste0("p-values from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(p_value_signif, zlim = c(0, 1), main = paste0("Significant areas from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    par(mfrow = c(1,1))
+  }
+
   ### Export
   
   # Build the final output with the four rasters: 
@@ -4070,7 +4926,7 @@ compute_SES_PBD_vs_TBD_within_regions <- function (proba_stack, list_shp_regions
 
 source(file = "./functions/compute_SES_tests.R")
 
-### 20.3.2/ Map SES-PBD according to TBD within regions ####
+### 21.4.2/ Map SES-PBD according to TBD within regions ####
 
 # Load spPolygon shape files for bioregions as example
 load(file = "./input_data/Map_stuff/Bioregions/All_bioregions_in_figure.RData")
@@ -4109,7 +4965,7 @@ save(SES_PBD_vs_TBD_within_regions, file = paste0("./outputs/Indices_maps/SES_PB
 
 
 
-### 20.4/ SES-MR according to SR/OMU richness ####
+### 21.5/ SES-MR according to SR/OMU richness ####
 
 ##### Can be adapted for mimicry richness vs. SR => randomize mimicry membership and recompute mimicry richness #####
 
@@ -4117,7 +4973,7 @@ save(SES_PBD_vs_TBD_within_regions, file = paste0("./outputs/Indices_maps/SES_PB
 # Or simply use "OMU-richness" and randomize across OMU before to recompute mimicry richness without caring for species richness
 
 
-### 20.4.1/ Function to compute SES-MR according to taxonomic richness
+### 21.5.1/ Function to compute SES-MR according to taxonomic richness ####
 
 ### Change for taxonomic richness but specify can be used at species level, and OMU level if polymorphism ####
 
@@ -4127,6 +4983,7 @@ compute_SES_MR_vs_taxo_richness <- function (proba_stack, # Species or OMU conti
                                              randomizations = 999, # To select the number of randomization
                                              alpha = 0.05,  # Threshold for significance for a two-sided test
                                              export_null_rasters = F, # Include the raster Stack of MR obtained from randomization in the output
+                                             plot_maps = T, # To plot the SES-maps
                                              plot_distri = T, # To plot the null distribution for an "average" community as an example
                                              example_coords = NULL, # To provide the coordinates of the community to use as example, otherwise a community with median species richness is used.
                                              quiet = F) # Should each generation of mimicry ring stack be quiet or not
@@ -4301,16 +5158,20 @@ compute_SES_MR_vs_taxo_richness <- function (proba_stack, # Species or OMU conti
   p_value_signif <- raster::cover(raster::cover(p_value_signif_lower, p_value_signif_upper), (continental_mask + 0.5))
   
   ### Plot the four raster Layers
-  par(mfrow = c(2,2))
   
-  plot(SES_raster, main = "SES-MR", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  plot(SES_signif, main = paste0("SES-MR significant areas\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  
-  plot(p_value_raster, zlim = c(0, 1), main = paste0("p-values from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  plot(p_value_signif, zlim = c(0, 1), main = paste0("Significant areas from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
-  
-  par(mfrow = c(1,1))
-  
+  if (plot_maps)
+  {
+    par(mfrow = c(2,2))
+    
+    plot(SES_raster, main = "SES-MR", col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(SES_signif, main = paste0("SES-MR significant areas\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    plot(p_value_raster, zlim = c(0, 1), main = paste0("p-values from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    plot(p_value_signif, zlim = c(0, 1), main = paste0("Significant areas from randomization tests\nalpha = ", alpha), col = colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(200))
+    
+    par(mfrow = c(1,1))
+  }
+
   ### Export
   
   final_output <- list(SES_raster, SES_signif, p_value_raster, p_value_signif)
@@ -4323,7 +5184,7 @@ compute_SES_MR_vs_taxo_richness <- function (proba_stack, # Species or OMU conti
 
 source(file = "./functions/compute_SES_tests.R")
 
-### 20.4.2/ Map SES-MR according to SR ####
+### 21.5.2/ Map SES-MR according to SR ####
 
 # Load OMU stack and mimicry membership info
 OMU_proba_stack <- readRDS("./outputs/Indices_stacks/All_OMU_stack_Jaccard.80.rds")
